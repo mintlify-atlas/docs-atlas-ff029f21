@@ -1,0 +1,260 @@
+---
+title: "Controllers"
+description: "How to create and work with controllers in the MetaMask Extension using the BaseController pattern."
+---
+
+Controllers are the backbone of MetaMask's background logic. Each controller extends `BaseController` from `@metamask/base-controller` and owns a specific slice of wallet state along with the business logic that acts on it — for example, managing tokens, tracking network activity, or handling permissions.
+
+## File location
+
+Place every controller in its own directory under `app/scripts/controllers/`:
+
+```
+app/scripts/controllers/
+└── your-controller/
+    ├── your-controller.ts       # Controller implementation
+    ├── your-controller.test.ts  # Unit tests
+    └── types.ts                 # Shared types for this controller
+```
+
+## State metadata requirements
+
+Every property in your controller's state type **must** have a corresponding metadata entry. The metadata tells the MetaMask infrastructure how to handle that property with respect to error reporting, logging, persistence, and the UI.
+
+| Property | Type | Purpose |
+|---|---|---|
+| `anonymous` **or** `includeInDebugSnapshot` | `boolean` | Whether the value is safe for Sentry (no PII) |
+| `includeInStateLogs` | `boolean` | Whether to include in state logs |
+| `persist` | `boolean` | Whether to save to storage across sessions |
+| `usedInUi` | `boolean` | Whether the UI renders this value |
+
+```typescript
+const tokensControllerMetadata = {
+  tokens: {
+    anonymous: true,          // No PII — safe for Sentry
+    includeInStateLogs: true, // Safe to include in logs
+    persist: true,            // Save across sessions
+    usedInUi: true,           // Rendered in the UI
+  },
+  apiKey: {
+    anonymous: false,          // Sensitive — exclude from Sentry
+    includeInStateLogs: false, // Must not appear in logs
+    persist: true,             // Still saved to storage
+    usedInUi: false,           // Backend use only
+  },
+};
+```
+
+<Warning>
+Omitting any of these four metadata fields causes a type error at compile time. Every state property must be covered.
+</Warning>
+
+## Default state function pattern
+
+Always export a **function** that returns the default state. Never export a plain object.
+
+<CodeGroup>
+
+```typescript correct
+// Returns a new object every time — no mutation risk
+export function getDefaultTokensControllerState(): TokensControllerState {
+  return {
+    tokens: [],
+    lastUpdated: 0,
+  };
+}
+```
+
+```typescript incorrect
+// Shared object reference — any mutation affects all callers
+export const defaultTokensControllerState = {
+  tokens: [],
+  lastUpdated: 0,
+};
+```
+
+</CodeGroup>
+
+If you export a plain object, every consumer that mutates the default state (for example, in a test) corrupts the shared reference for all other callers. The function pattern eliminates this class of bug.
+
+## Constructor single options bag
+
+Pass all constructor arguments in a single options object. Never use positional arguments alongside the options object.
+
+<CodeGroup>
+
+```typescript correct
+constructor({
+  messenger,
+  state = {},
+  apiKey,
+  isEnabled,
+}: TokensControllerOptions) {
+  super({
+    name: 'TokensController',
+    metadata: tokensControllerMetadata,
+    messenger,
+    state: { ...getDefaultTokensControllerState(), ...state },
+  });
+}
+```
+
+```typescript incorrect
+constructor(
+  options: ControllerOptions,
+  apiKey: string,     // Positional arg — do not do this
+  isEnabled: boolean, // Positional arg — do not do this
+) {}
+```
+
+</CodeGroup>
+
+## Action methods, not generic setters
+
+Model methods as high-level user actions. Avoid generic setters like `setTokenData` or `updateField` — they leak implementation details and make the controller harder to test and reason about.
+
+```typescript
+// Expresses what the user did, not which field changed
+addToken(token: Token) {
+  if (!token.address) {
+    throw new Error('Token address required');
+  }
+
+  this.update((state) => {
+    state.tokens.push(token);
+    state.lastUpdated = Date.now();
+  });
+}
+
+removeToken(address: string) {
+  this.update((state) => {
+    state.tokens = state.tokens.filter((t) => t.address !== address);
+    state.lastUpdated = Date.now();
+  });
+}
+```
+
+Use `this.update()` (provided by `BaseController`) to apply immutable state updates with Immer under the hood.
+
+## Keep state minimal — use selectors for derived values
+
+Never store data that can be computed from other state. Derived values stored in state become a synchronisation problem: they go stale and require extra logic to keep in sync.
+
+<CodeGroup>
+
+```typescript incorrect
+type State = {
+  tokens: Token[];
+  tokenCount: number;  // Derived — do not store
+  hasTokens: boolean;  // Derived — do not store
+};
+```
+
+```typescript correct
+type State = {
+  tokens: Token[]; // Only the essential data
+};
+
+// Export selectors for derived values
+export const tokensControllerSelectors = {
+  selectTokens: (state: State) => state.tokens,
+  selectTokenCount: (state: State) => state.tokens.length,
+  selectHasTokens: (state: State) => state.tokens.length > 0,
+};
+```
+
+</CodeGroup>
+
+## Cleanup with `destroy()`
+
+If your controller starts background tasks — polling intervals, event listeners, timers — implement a `destroy()` method to clean them up when the controller is torn down.
+
+```typescript
+class TokensController extends BaseController<
+  typeof name,
+  TokensControllerState,
+  TokensControllerMessenger
+> {
+  #pollInterval: NodeJS.Timeout | null = null;
+
+  constructor(options: TokensControllerOptions) {
+    super(/* ... */);
+    if (options.enablePolling) {
+      this.#startPolling();
+    }
+  }
+
+  destroy() {
+    if (this.#pollInterval) {
+      clearInterval(this.#pollInterval);
+      this.#pollInterval = null;
+    }
+    // Always call super to let BaseController clean up the messenger
+    super.destroy();
+  }
+}
+```
+
+<Note>
+Always call `super.destroy()` at the end of your `destroy()` implementation. `BaseController` uses it to unsubscribe all messenger handlers.
+</Note>
+
+## Messenger pattern
+
+Controllers communicate with each other through a typed pub/sub messenger rather than direct imports. This keeps controllers decoupled and their dependencies explicit.
+
+<Steps>
+  <Step title="Declare allowed actions and events">
+    Define what messages your controller can send and receive in `types.ts`:
+
+    ```typescript
+    export type TokensControllerActions =
+      | TokensControllerAddTokenAction
+      | TokensControllerRemoveTokenAction;
+
+    export type TokensControllerEvents = TokensControllerStateChangeEvent;
+
+    export type TokensControllerMessenger = RestrictedMessenger<
+      typeof name,
+      AllowedActions,
+      AllowedEvents,
+      AllowedActions['type'],
+      AllowedEvents['type']
+    >;
+    ```
+  </Step>
+  <Step title="Publish events on state changes">
+    `BaseController` automatically publishes a `stateChange` event whenever you call `this.update()`. Other controllers subscribe to these events via the messenger without needing a direct reference.
+  </Step>
+  <Step title="Call actions on other controllers">
+    Use `this.messagingSystem.call()` to invoke actions on other controllers without importing them directly:
+
+    ```typescript
+    const network = this.messagingSystem.call(
+      'NetworkController:getSelectedNetworkClient',
+    );
+    ```
+  </Step>
+</Steps>
+
+## Related files to update
+
+When you modify a controller, update these files to keep everything consistent:
+
+```
+app/scripts/controllers/foo/foo-controller.ts  →  ALSO UPDATE:
+├── app/scripts/controllers/foo/foo-controller.test.ts  (tests)
+├── app/scripts/controllers/foo/types.ts                (if types changed)
+└── app/scripts/metamask-controller.ts                  (if adding/removing controller)
+```
+
+If you change the **shape** of the state, you must also create a migration:
+
+```bash
+yarn generate:migration
+# Then edit: app/scripts/migrations/[next-number].ts
+```
+
+<Tip>
+Read `.cursor/rules/controller-guidelines/RULE.md` in the repository for the complete set of patterns and worked examples used by the MetaMask team.
+</Tip>

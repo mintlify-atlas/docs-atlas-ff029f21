@@ -1,0 +1,172 @@
+---
+title: "Browser Support"
+description: "Supported browsers, Manifest V2 vs V3 differences, and guidelines for writing cross-browser compatible code."
+---
+
+MetaMask supports Chrome, Firefox, Brave, Edge, and Opera. Chrome, Brave, Edge, and Opera use the Manifest V3 build; Firefox uses the Manifest V2 build.
+
+## Supported browsers
+
+MetaMask targets the following browsers:
+
+<CardGroup cols={2}>
+  <Card title="Chrome" icon="chrome">
+    Last two years of stable releases. Uses Manifest V3. Build with `yarn start` or `yarn dist`.
+  </Card>
+  <Card title="Firefox" icon="firefox">
+    Current and previous Extended Support Release (ESR). Uses Manifest V2. Build with `yarn start:mv2` or `yarn dist:mv2`.
+  </Card>
+  <Card title="Brave" icon="shield">
+    Chromium-based. Follows Chrome MV3 support. Build with `yarn start` or `yarn dist`.
+  </Card>
+  <Card title="Edge" icon="globe">
+    Chromium-based. Follows Chrome MV3 support. Build with `yarn start` or `yarn dist`.
+  </Card>
+</CardGroup>
+
+<Note>
+  MetaMask tries to support browser forks aligned with supported Chrome or Firefox releases, but does not actively test them.
+</Note>
+
+Before bumping the minimum supported browser version, update the `OUTDATED_BROWSER_VERSIONS` constant in the release prior to the bump. This triggers an in-app notification for users on older browsers so they aren't silently left behind.
+
+## Manifest V2 vs Manifest V3
+
+The two builds differ in several important ways:
+
+| Feature | MV2 (Firefox) | MV3 (Chrome / Chromium) |
+|---------|--------------|------------------------|
+| Background script type | Persistent background page | Service worker (no DOM access) |
+| Permissions model | Broader, more permissive | More restrictive; declarative net request |
+| API namespace | `browser.*` (native) | `chrome.*` (polyfilled to `browser.*`) |
+| Build flag | `ENABLE_MV3=false` | Default |
+| Development command | `yarn start:mv2` | `yarn start` |
+| Production command | `yarn dist:mv2` | `yarn dist` |
+
+<Warning>
+  Service workers in MV3 can be suspended by the browser. Avoid relying on in-memory state that persists across suspension cycles in the Chrome background script.
+</Warning>
+
+## Cross-browser code guidelines
+
+### Use the `browser.*` namespace
+
+Always use the `browser.*` namespace rather than `chrome.*`. The extension uses [`webextension-polyfill`](https://github.com/mozilla/webextension-polyfill) to normalize `browser.*` across Chrome and Firefox:
+
+```javascript
+// Correct — works in both Chrome and Firefox
+browser.storage.local.get('key');
+
+// Avoid — Chrome-only
+chrome.storage.local.get('key');
+```
+
+The polyfill is initialized early in the background script and content scripts, so `browser.*` is available everywhere in the extension's JavaScript context.
+
+### Conditional browser logic
+
+When behavior genuinely differs between browsers, use the utility helpers in `app/scripts/lib/util.js`. Avoid ad-hoc `navigator.userAgent` checks in feature code; centralize browser detection so it's easy to audit and update.
+
+### Manifest files
+
+MV2 and MV3 manifests live at:
+
+```
+app/manifest/v2/   # Firefox (MV2)
+app/manifest/v3/   # Chrome/Chromium (MV3)
+```
+
+The build system selects the correct manifest based on the `ENABLE_MV3` environment variable. You rarely need to edit both manually, but when adding new permissions or host patterns you must update both.
+
+## Build commands per browser target
+
+<Tabs>
+  <Tab title="Chrome / Edge / Brave">
+    ```bash
+    # Development (Webpack, with file watching)
+    yarn start
+
+    # Production (Browserify + LavaMoat)
+    yarn dist
+
+    # Test build (for E2E tests)
+    yarn build:test
+    ```
+  </Tab>
+  <Tab title="Firefox">
+    ```bash
+    # Development (Webpack, with file watching)
+    yarn start:mv2
+
+    # Production (Browserify + LavaMoat)
+    yarn dist:mv2
+
+    # Test build (for E2E tests)
+    yarn build:test:mv2
+    ```
+  </Tab>
+</Tabs>
+
+## E2E testing per browser
+
+Always build a test build before running E2E tests:
+
+<Steps>
+  <Step title="Build the test bundle">
+    <Tabs>
+      <Tab title="Chrome">
+        ```bash
+        yarn build:test
+        ```
+      </Tab>
+      <Tab title="Firefox">
+        ```bash
+        yarn build:test:mv2
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Run the E2E suite">
+    <Tabs>
+      <Tab title="Chrome">
+        ```bash
+        yarn test:e2e:chrome
+        ```
+      </Tab>
+      <Tab title="Firefox">
+        ```bash
+        yarn test:e2e:firefox
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+To run a single test file with additional debug options:
+
+```bash
+yarn test:e2e:single test/e2e/tests/account-menu/account-details.spec.js \
+  --browser=chrome \
+  --leave-running \
+  --debug
+```
+
+### Firefox Snap on Linux
+
+If you run Firefox as a [Snap package](https://snapcraft.io/) on Linux, set the `FIREFOX_SNAP` environment variable so the test runner can locate the Firefox binary:
+
+```bash
+FIREFOX_SNAP=true yarn test:e2e:firefox
+```
+
+<Info>
+  This is only needed when Firefox is installed via Snap on Linux. Standard Firefox installations do not require this flag.
+</Info>
+
+## Choosing the right browser target
+
+```
+Chrome, Edge, or Brave  →  MV3  →  yarn start / yarn dist
+Firefox                 →  MV2  →  yarn start:mv2 / yarn dist:mv2
+Not specified           →  Default to Chrome MV3  →  yarn start
+```

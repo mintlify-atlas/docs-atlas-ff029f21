@@ -1,0 +1,172 @@
+---
+title: "Unit Tests"
+description: "Running and writing unit tests for the MetaMask Extension using Jest."
+---
+
+Unit tests in the MetaMask Extension use [Jest](https://jestjs.io/) as the test framework. Jest replaces Mocha, Sinon, and Assert — you do not need those libraries for new tests.
+
+## Running tests
+
+<CodeGroup>
+
+```bash Run all unit tests
+yarn test:unit
+```
+
+```bash Watch mode (re-runs on file changes)
+yarn test:unit:watch
+```
+
+```bash With coverage report
+yarn test:unit:coverage
+```
+
+</CodeGroup>
+
+To run lint alongside unit tests in one step, use `yarn test`.
+
+<Tip>
+  Use watch mode during active development to get fast feedback as you edit source files.
+</Tip>
+
+## Test file location
+
+Colocate test files with the source file they test. Place the test file in the same directory and use `.test.ts` or `.test.tsx` as the suffix.
+
+```
+ui/components/token-list/
+├── token-list.tsx
+├── token-list.test.tsx   ← colocated test
+├── token-list.types.ts
+└── index.ts
+```
+
+<Note>
+  Do not place unit tests under a separate `test/` directory. The `test/` directory at the repo root is reserved for E2E and integration tests.
+</Note>
+
+## Test structure
+
+Structure every test using **Arrange / Act / Assert** (AAA):
+
+- **Arrange** — set up the object under test, initialize state, and stub dependencies.
+- **Act** — trigger the behavior you want to verify.
+- **Assert** — check the outcome.
+
+Use `describe` blocks to group tests by method or function name. Nest a second `describe` inside to group by scenario when helpful.
+
+```typescript
+describe('TokensController', () => {
+  describe('addToken', () => {
+    it('adds the token to state', () => {
+      // Arrange
+      const controller = new TokensController({ messenger });
+
+      // Act
+      controller.addToken({ address: '0xabc', symbol: 'TKN', decimals: 18 });
+
+      // Assert
+      expect(controller.state.tokens).toHaveLength(1);
+      expect(controller.state.tokens[0].symbol).toBe('TKN');
+    });
+
+    it('throws when the token address is missing', () => {
+      // Arrange
+      const controller = new TokensController({ messenger });
+
+      // Act & Assert
+      expect(() =>
+        controller.addToken({ symbol: 'TKN', decimals: 18 } as never),
+      ).toThrow('Token address required');
+    });
+  });
+});
+```
+
+## Naming conventions
+
+<AccordionGroup>
+  <Accordion title="Use present tense, not 'should'">
+    Write test names as statements of fact in present tense. Avoid starting names with "should".
+
+    ```typescript
+    // ✅ correct
+    it('returns an empty array when no tokens exist', () => { ... });
+    it('throws when the address is invalid', () => { ... });
+
+    // ❌ avoid
+    it('should return an empty array', () => { ... });
+    it('should throw when the address is invalid', () => { ... });
+    ```
+  </Accordion>
+
+  <Accordion title="Describe blocks mirror the public API">
+    Name the outer `describe` block after the class or module, and inner `describe` blocks after the method being tested.
+
+    ```typescript
+    describe('GasFeeController', () => {
+      describe('fetchGasFeeEstimates', () => {
+        it('fetches estimates from the network', () => { ... });
+        it('caches the result for the configured interval', () => { ... });
+      });
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## What to test and what to avoid
+
+<Tabs>
+  <Tab title="Test public interfaces">
+    Test the behavior observable through public methods and outputs. Avoid reaching into private state or internal implementation details.
+
+    ```typescript
+    // ✅ test behavior through the public API
+    it('increments the nonce after each transaction', async () => {
+      await controller.signTransaction(tx);
+      expect(controller.state.nonce).toBe(1);
+    });
+
+    // ❌ avoid coupling to private internals
+    it('calls the private _updateNonce helper', () => {
+      const spy = jest.spyOn(controller as never, '_updateNonce');
+      controller.signTransaction(tx);
+      expect(spy).toHaveBeenCalled();
+    });
+    ```
+  </Tab>
+  <Tab title="Keep test data inline">
+    Keep critical test data in the test itself so the assertion context is self-contained. Use generator functions to reduce boilerplate while still making intent clear.
+
+    ```typescript
+    const generateTokenProps = (overrides = {}) => ({
+      address: '0xabc',
+      symbol: 'TKN',
+      decimals: 18,
+      ...overrides,
+    });
+
+    it('displays the token symbol', () => {
+      const props = generateTokenProps({ symbol: 'ETH' });
+      const { getByText } = render(<TokenListItem {...props} />);
+      expect(getByText('ETH')).toBeInTheDocument();
+    });
+    ```
+  </Tab>
+  <Tab title="Use Jest timers">
+    Replace `setTimeout`-based waits with Jest's fake timer APIs to avoid slow or flaky tests.
+
+    ```typescript
+    // ❌ slow and flaky
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    // ✅ use Jest's fake timers
+    jest.useFakeTimers();
+    jest.advanceTimersByTime(5000);
+    ```
+  </Tab>
+</Tabs>
+
+## Jest debugging
+
+For a detailed guide on debugging Jest tests with Node.js, see `docs/tests/jest.md` in the repository.

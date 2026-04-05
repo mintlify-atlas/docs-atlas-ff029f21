@@ -1,0 +1,122 @@
+---
+title: "E2E Tests"
+description: "Running end-to-end tests for the MetaMask Extension with Selenium and Playwright."
+---
+
+The MetaMask Extension E2E suite runs against real browser instances using Selenium (Mocha-based specs) and Playwright. Tests can run on Chrome or Firefox.
+
+## Preparing a test build
+
+You must have a test build before running any E2E tests. Dev builds (`yarn start`) are not compatible. Choose one of the three options below.
+
+<Steps>
+  <Step title="Choose a build option">
+    <Tabs>
+      <Tab title="Download pre-built (fastest)">
+        Download and unzip the latest pre-built Chrome and Firefox test builds into `./dist/`. This is the quickest option for standard testing.
+
+        ```bash
+        yarn download-builds --build-type test
+        ```
+      </Tab>
+      <Tab title="yarn build:test (production-like)">
+        Build a test build locally with LavaMoat enabled. This mirrors the production environment most closely and is the right choice for final verification.
+
+        ```bash
+        # Main build
+        yarn build:test
+
+        # Flask build (beta features)
+        yarn build:test:flask
+
+        # Firefox MV2 build
+        yarn build:test:mv2
+        ```
+
+        <Warning>
+          `yarn build:test` takes longer than `yarn start:test` because LavaMoat runs security policy checks on every dependency.
+        </Warning>
+      </Tab>
+      <Tab title="yarn start:test (faster iteration)">
+        Start a test build with live recompilation. LavaMoat is disabled, so builds are faster and easier to iterate on during development.
+
+        ```bash
+        # Main build
+        yarn start:test
+
+        # Flask build
+        yarn start:test:flask
+
+        # Firefox MV2 build
+        yarn start:test:mv2
+        ```
+
+        <Note>
+          `yarn start:test` uses the `testDev` build type. LavaMoat is disabled for both the build system and the application. Use `yarn build:test` when you need to verify LavaMoat policy compliance.
+        </Note>
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Run the tests">
+    Once you have a test build in `./dist/`, run the full E2E suite for your target browser.
+
+    ```bash
+    # Chrome
+    yarn test:e2e:chrome
+
+    # Firefox
+    yarn test:e2e:firefox
+    ```
+
+    <Note>
+      If you run Firefox as a snap package on Linux, set the environment variable before the command:
+
+      ```bash
+      FIREFOX_SNAP=true yarn test:e2e:firefox
+      ```
+    </Note>
+  </Step>
+</Steps>
+
+## Running a single test
+
+Run one spec file directly using `yarn test:e2e:single`:
+
+```bash
+yarn test:e2e:single test/e2e/tests/TEST_NAME.spec.js --browser=chrome --leave-running
+```
+
+For example, to run the `account-details` spec on Chrome with debug logging and the browser left open on failure:
+
+```bash
+yarn test:e2e:single test/e2e/tests/account-menu/account-details.spec.js \
+  --browser=chrome \
+  --leave-running
+```
+
+## CLI options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `--browser` | string | `'all'` | Browser to use: `chrome`, `firefox`, or `all` |
+| `--debug` | boolean | `true` | Log each driver interaction |
+| `--retries` | number | `0` | Number of retries on failure |
+| `--leave-running` | boolean | `false` | Keep the browser open after a test fails |
+| `--update-snapshot` / `-u` | boolean | `false` | Update E2E test snapshots |
+
+Use `--help` with any test script to see all available options.
+
+<Tip>
+  Combine `--leave-running` and `--debug` when investigating a flaky or failing test. The browser stays open so you can inspect extension state, and the log shows each Selenium driver call.
+</Tip>
+
+## Choosing between `yarn start:test` and `yarn build:test`
+
+| | `yarn start:test` | `yarn build:test` |
+|---|---|---|
+| **LavaMoat** | Disabled | Enabled |
+| **Speed** | Faster (Webpack, live reload) | Slower (Browserify + policy checks) |
+| **Best for** | Development iteration | Final verification, CI parity |
+| **Mirrors production** | No | Yes |
+
+Use `yarn start:test` while developing or debugging a test. Switch to `yarn build:test` before merging to confirm the build works with LavaMoat enabled.

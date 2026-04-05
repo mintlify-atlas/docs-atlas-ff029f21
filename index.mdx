@@ -1,97 +1,74 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "MetaMask Extension"
+description: "Contributor documentation for the MetaMask browser extension — the Ethereum wallet for Chrome, Firefox, Brave, and Edge."
 ---
 
-## Setting up
+Welcome to the MetaMask Extension contributor documentation. This site covers everything you need to build, test, and contribute to the MetaMask browser extension — the world's leading self-custodial Ethereum wallet with over 30 million monthly active users.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Local Setup" icon="laptop-code" href="/getting-started/local-setup">
+    Get your development environment running in minutes with step-by-step setup instructions.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Architecture" icon="diagram-project" href="/architecture">
+    Understand the extension's background, UI, and content script layers.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Testing Guide" icon="flask" href="/guides/testing/unit-tests">
+    Run unit tests, E2E tests, and learn about feature flags for test builds.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Controllers & State" icon="gear" href="/guides/controllers">
+    Learn the BaseController pattern and how business logic is structured.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What is the MetaMask Extension?
 
-Everything you need to create world-class documentation.
+The MetaMask browser extension connects users to the Ethereum blockchain and compatible networks. It manages private keys, signs transactions, and injects an `ethereum` provider into web pages — enabling decentralized applications (dapps) to request user accounts and submit transactions.
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+The extension is built with:
+- **React + Redux** for the UI layer
+- **TypeScript** for all new code
+- **Browserify + LavaMoat** for production builds (supply-chain security)
+- **Webpack** for development builds
+- **Jest** for unit tests and **Playwright/Selenium** for E2E tests
 
-## Need inspiration?
+<CardGroup cols={2}>
+  <Card title="Build System" icon="hammer" href="/getting-started/build-system">
+    Understand Browserify, Webpack, build types, and feature flags.
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/contributing/development-workflow">
+    PR workflow, commit conventions, and code review process.
+  </Card>
+  <Card title="LavaMoat Security" icon="shield-halved" href="/guides/lavamoat">
+    Learn how LavaMoat protects the extension from supply chain attacks.
+  </Card>
+  <Card title="MetaMask Snaps" icon="puzzle-piece" href="/guides/snaps">
+    Extend MetaMask's functionality using the Snaps plugin platform.
+  </Card>
+</CardGroup>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+## Quick navigation
+
+<CardGroup cols={3}>
+  <Card title="Add to Chrome" icon="chrome" href="/getting-started/add-to-chrome">
+    Load your local build in Chrome
+  </Card>
+  <Card title="Add to Firefox" icon="firefox" href="/getting-started/add-to-firefox">
+    Load your local build in Firefox
+  </Card>
+  <Card title="E2E Tests" icon="vial" href="/guides/testing/e2e-tests">
+    Run the full end-to-end test suite
+  </Card>
+  <Card title="UI Components" icon="layer-group" href="/guides/ui-components">
+    React component patterns and Storybook
+  </Card>
+  <Card title="Translations" icon="language" href="/guides/translations">
+    Add or update locale strings
+  </Card>
+  <Card title="Browser Support" icon="globe" href="/guides/browser-support">
+    MV2 vs MV3 and browser compatibility
+  </Card>
+</CardGroup>
+
+<Note>
+  For help using MetaMask as a wallet, visit [support.metamask.io](https://support.metamask.io). For dapp developer documentation, visit [docs.metamask.io](https://docs.metamask.io). This site is for **extension contributors** only.
+</Note>

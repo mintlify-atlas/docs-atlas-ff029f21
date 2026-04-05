@@ -1,0 +1,146 @@
+---
+title: "MetaMask Snaps"
+description: "How MetaMask Snaps extend the extension's functionality and how to develop with them locally."
+---
+
+MetaMask Snaps are sandboxed JavaScript programs that run inside MetaMask and extend its functionality. Snaps can add new keyring types, provide custom transaction insights, support additional networks, resolve names, sign messages, and more — all within a secure, permission-gated execution environment.
+
+## What Snaps are
+
+A Snap is a program that runs in an isolated JavaScript environment inside MetaMask. MetaMask controls what APIs each Snap can access through an explicit permissions model. Users must approve a Snap's permissions before it can run.
+
+Common Snap use cases include:
+
+- **Account management** — custom keyring types (hardware wallets, MPC, social recovery)
+- **Transaction insights** — analyze transactions before the user signs
+- **New networks** — add support for non-EVM chains (Bitcoin, Solana, etc.)
+- **Name resolution** — resolve human-readable names like ENS domains
+- **Message signing** — add custom signing logic
+
+## Snaps in the extension codebase
+
+### Preinstalled Snaps
+
+The extension ships with several Snaps preinstalled. These are bundled from npm packages and copied into the build output by the build system:
+
+| Snap | Package |
+|------|---------|
+| Bitcoin wallet | `@metamask/bitcoin-wallet-snap` |
+| Solana wallet | `@metamask/solana-wallet-snap` |
+| Message signing | `@metamask/message-signing-snap` |
+| ENS resolver | `@metamask/ens-resolver-snap` |
+| Institutional wallet | `@metamask/institutional-wallet-snap` |
+| Permissions kernel | `@metamask/permissions-kernel-snap` |
+
+Preinstalled Snap manifests live under `snaps/` in the build output (for example, `snaps/message-signing-snap.json`). The build system copies them from each package's `dist/preinstalled-snap.json`.
+
+### Snaps controllers
+
+Snaps behavior in the background is handled by two packages:
+
+- **`@metamask/snaps-controllers`** — manages Snap lifecycle, permissions, and state
+- **`@metamask/snaps-rpc-methods`** — implements the JSON-RPC methods Snaps can call
+
+These are wired into the main `MetaMaskController` in `app/scripts/metamask-controller.js`.
+
+### Flask build type
+
+Flask is a special build type that enables experimental Snaps features not yet available in the main extension. Key differences from the `main` build:
+
+| Setting | `main` | `flask` |
+|---------|--------|---------|
+| `ALLOW_LOCAL_SNAPS` | `false` | `true` |
+| `REQUIRE_SNAPS_ALLOWLIST` | `true` | `false` |
+| `REJECT_INVALID_SNAPS_PLATFORM_VERSION` | `true` | `false` |
+
+Flask also includes additional preinstalled Snaps for development, such as `@metamask/account-watcher` and `@metamask/preinstalled-example-snap`.
+
+## Building with Snaps enabled
+
+### Running Flask locally
+
+<Steps>
+  <Step title="Configure your environment">
+    Copy `.metamaskrc.dist` to `.metamaskrc` if you haven't already, then add your Infura project ID:
+
+    ```bash
+    cp .metamaskrc.dist .metamaskrc
+    ```
+
+    To allow locally-served Snaps in a non-Flask build, add the following to `.metamaskrc`:
+
+    ```bash
+    ALLOW_LOCAL_SNAPS=true
+    ```
+  </Step>
+  <Step title="Start the Flask build">
+    Run the Flask development build, which watches for file changes:
+
+    ```bash
+    yarn start:flask
+    ```
+
+    This starts a Webpack build with the `flask` build type, enabling all experimental Snaps features.
+  </Step>
+  <Step title="Load the extension in your browser">
+    Load the unpacked extension from `dist/chrome/` (Chrome) or `dist/firefox/` (Firefox) via your browser's extension management page.
+
+    See `docs/add-to-chrome.md` or `docs/add-to-firefox.md` for detailed steps.
+  </Step>
+</Steps>
+
+<Note>
+  The Flask build is pre-release software. Do not use it as your primary MetaMask installation.
+</Note>
+
+### Build commands
+
+<Tabs>
+  <Tab title="Development (Flask)">
+    ```bash
+    yarn start:flask
+    ```
+  </Tab>
+  <Tab title="Test build (Flask)">
+    ```bash
+    yarn build:test:flask
+    ```
+  </Tab>
+  <Tab title="Development (main, local Snaps)">
+    Add `ALLOW_LOCAL_SNAPS=true` to `.metamaskrc`, then:
+
+    ```bash
+    yarn start
+    ```
+  </Tab>
+</Tabs>
+
+## Snaps registry
+
+The extension uses a mocked Snaps registry in E2E tests. The registry mock data lives at:
+
+```
+test/e2e/mock-response-data/snaps/
+```
+
+Key files in that directory:
+
+| File | Purpose |
+|------|---------|
+| `snap-registry-mocks.ts` | Mock registry responses for E2E tests |
+| `snap-binary-mocks.ts` | Mock Snap binary responses |
+| `update-snaps-registry.ts` | Script to refresh registry data |
+
+To update the mock registry data:
+
+```bash
+yarn update-snaps-registry
+```
+
+<Info>
+  You need to update the registry mocks whenever you add a new Snap to the test suite or when upstream registry data changes.
+</Info>
+
+## External resources
+
+For building your own Snap or integrating Snaps into a dapp, see the MetaMask Snaps developer documentation at [https://docs.metamask.io/snaps/](https://docs.metamask.io/snaps/).

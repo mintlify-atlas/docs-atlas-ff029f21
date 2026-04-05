@@ -1,0 +1,182 @@
+---
+title: "Translations"
+description: "How to add or update translations in the MetaMask Extension."
+---
+
+MetaMask supports dozens of languages through locale files in `app/_locales/`. Each language is a folder containing a `messages.json` file that maps message keys to translated strings.
+
+## Locale file structure
+
+All locale files live under `app/_locales/`. Each supported language has its own subfolder named after the language's [BCP 47 subtag](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) (for example, `app/_locales/es/` for Spanish).
+
+Inside each folder, `messages.json` contains an object where each key maps to a message entry:
+
+```json
+{
+  "appName": {
+    "message": "MetaMask",
+    "description": "The name of the application"
+  },
+  "send": {
+    "message": "Send",
+    "description": "Button label for sending tokens"
+  }
+}
+```
+
+Each entry has two fields:
+
+| Field | Required | Purpose |
+|-------|----------|---------|
+| `message` | Yes | The string displayed in the UI. Translate this field. |
+| `description` | No | Context for translators. Do not translate this field. |
+
+The English locale (`app/_locales/en/messages.json`) is the source of truth. All other locales must contain the same set of keys.
+
+## Adding a new language
+
+<Steps>
+  <Step title="Look up the language subtag">
+    Find the correct BCP 47 subtag for your language using the [r12a subtag finder](https://r12a.github.io/app-subtags/) or the [Wikipedia ISO 639-1 list](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes).
+
+    For example, Japanese is `ja`, Brazilian Portuguese is `pt_BR`.
+  </Step>
+  <Step title="Create the locale folder and messages file">
+    Create a new folder under `app/_locales/` using the subtag as the name, then copy the English messages file into it:
+
+    ```bash
+    mkdir app/_locales/ja
+    cp app/_locales/en/messages.json app/_locales/ja/messages.json
+    ```
+  </Step>
+  <Step title="Translate the message values">
+    Open `app/_locales/ja/messages.json` and translate the `message` value for each entry. Leave the `description` values untouched — they are for translator context only and are not shown in the UI.
+  </Step>
+  <Step title="Register the locale">
+    Add your language to the locales index at `app/_locales/index.json`:
+
+    ```json
+    { "code": "ja", "name": "日本語" }
+    ```
+
+    Entries in this file determine which languages appear in MetaMask's language picker.
+  </Step>
+</Steps>
+
+## Adding new strings
+
+When you add new UI strings to the extension, always start with the English locale:
+
+<Steps>
+  <Step title="Add the string to the English locale">
+    Open `app/_locales/en/messages.json` and add your new key with a `message` and a `description`:
+
+    ```json
+    "myNewFeatureTitle": {
+      "message": "My new feature",
+      "description": "Title shown on the new feature page"
+    }
+    ```
+  </Step>
+  <Step title="Use the string in code">
+    Access the string via the `t` helper (internationalization utility) in the UI:
+
+    ```javascript
+    t('myNewFeatureTitle')
+    ```
+  </Step>
+  <Step title="Add stubs to other locales (optional)">
+    You can add the English string as a fallback to other locale files, or leave that for translators to fill in via Crowdin.
+  </Step>
+</Steps>
+
+<Tip>
+  MetaMask falls back to the English locale when a string is missing from the active locale, so you don't need to update every language file before merging.
+</Tip>
+
+## Verifying locales
+
+Two scripts help you catch missing or unused translation strings.
+
+### Check for missing strings
+
+Run the verification script against a specific locale:
+
+```bash
+yarn verify-locales
+```
+
+Or target a specific locale directly:
+
+```bash
+node development/verify-locale-strings.js es
+```
+
+Replace `es` with your locale code. The script reports any keys present in `en/messages.json` that are missing from the target locale.
+
+### Fix automatically
+
+To automatically remove keys from locale files that no longer exist in the English source:
+
+```bash
+yarn verify-locales:fix
+```
+
+<Warning>
+  `yarn verify-locales:fix` modifies locale files in place. Review the diff before committing.
+</Warning>
+
+## Crowdin integration
+
+MetaMask uses [Crowdin](https://crowdin.com/) to manage community translations. The integration is configured in `crowdin.yml` at the repository root:
+
+```yaml
+project_id_env: CROWDIN_PROJECT_ID
+api_token_env: CROWDIN_PERSONAL_TOKEN
+base_path: .
+preserve_hierarchy: true
+
+files:
+  - source: app/_locales/en/messages.json
+    translation: /app/_locales/%two_letters_code%/%original_file_name%
+    languages_mapping:
+      two_letters_code:
+        zh-CN: zh_CN
+```
+
+The source file is always `app/_locales/en/messages.json`. Crowdin translates it and writes output back into the corresponding locale folders. The `languages_mapping` section handles cases where Crowdin's language codes differ from the folder names MetaMask uses (for example, `zh-CN` maps to `zh_CN`).
+
+<Info>
+  You typically do not need to run Crowdin commands manually. Translation syncs happen through CI.
+</Info>
+
+## Testing a locale in the browser
+
+To verify your translation looks correct in the running extension:
+
+<Steps>
+  <Step title="Build and load the extension">
+    Run a development build and load it into your browser:
+
+    ```bash
+    yarn start
+    ```
+
+    See `docs/add-to-chrome.md` or `docs/add-to-firefox.md` for loading instructions.
+  </Step>
+  <Step title="Change the browser language">
+    In Chrome, go to `chrome://settings/languages` and move your target language to the top of the list.
+
+    In Firefox, go to **Settings → General → Language** and add or prioritize your language.
+  </Step>
+  <Step title="Restart the browser">
+    Close and reopen your browser completely so the language change takes effect. MetaMask reads the browser's active locale on startup.
+  </Step>
+  <Step title="Inspect the extension">
+    Open MetaMask and verify the strings appear in the expected language. If a string falls back to English, check that the key exists in your locale file and that `yarn verify-locales` reports no issues.
+  </Step>
+</Steps>
+
+<Note>
+  You must change both your browser language and (on some systems) your operating system language for the locale to apply correctly.
+</Note>

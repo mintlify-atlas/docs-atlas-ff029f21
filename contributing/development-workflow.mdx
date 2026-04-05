@@ -1,0 +1,222 @@
+---
+title: "Development Workflow"
+description: "How to make changes, run linters, write tests, and submit pull requests to the MetaMask Extension."
+---
+
+## Overview
+
+<CardGroup cols={3}>
+  <Card title="Commit format" icon="git-commit">
+    Conventional Commits required for all commit messages and PR titles.
+  </Card>
+  <Card title="Pre-commit hooks" icon="shield-check">
+    Husky hooks run linting automatically before each commit.
+  </Card>
+  <Card title="Draft PRs" icon="git-pull-request">
+    All pull requests open as drafts by default.
+  </Card>
+</CardGroup>
+
+## Commit messages
+
+All commits must follow the [Conventional Commits](https://www.conventionalcommits.org/) format:
+
+```text
+<type>(optional-scope): <summary>
+```
+
+Common types include `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `bump`, and `release`. Use `bump` for package updates and `release` for release-preparation tasks — not `chore`.
+
+**Examples:**
+
+```text
+feat(networks): add token validation for custom networks
+fix(send): handle undefined slippage tolerance
+bump: upgrade @metamask/base-controller to v6.0.0
+```
+
+<Note>
+  If you reach for `chore`, evaluate whether `bump` or `release` is a better fit. Both are custom types specific to this project.
+</Note>
+
+## Pre-commit hooks
+
+Install the Husky-managed git hooks once after cloning the repository:
+
+```bash
+yarn githooks:install
+```
+
+The hooks run `yarn lint:changed:fix` automatically before each commit, giving you fast feedback on the files you changed.
+
+<Note>
+  If you use VS Code and commits fail with a "command not found" error from the source control sidebar, follow the [Husky troubleshooting guide](https://typicode.github.io/husky/troubleshooting.html#command-not-found) to fix your shell environment.
+</Note>
+
+## Linting
+
+Run the fastest option first — linting only the files you changed keeps the feedback loop tight.
+
+<Tabs>
+  <Tab title="Changed files only (recommended)">
+    ```bash
+    # Check changed files
+    yarn lint:changed
+
+    # Check and auto-fix changed files
+    yarn lint:changed:fix
+    ```
+  </Tab>
+  <Tab title="Full codebase">
+    ```bash
+    # Run all linters (Prettier + ESLint + TypeScript + Styles + Images)
+    yarn lint
+
+    # Auto-fix all fixable issues
+    yarn lint:fix
+    ```
+  </Tab>
+  <Tab title="Individual linters">
+    ```bash
+    yarn lint:eslint           # ESLint only
+    yarn lint:tsc              # TypeScript type checking
+    yarn lint:prettier         # Prettier formatting check
+    yarn lint:styles           # Stylelint for SCSS
+    yarn lint:eslint:fix       # Fix ESLint issues
+    yarn lint:prettier:fix     # Fix formatting
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  Always run `yarn lint:changed:fix` before committing. The CI pipeline runs the full linter suite and will block merges on lint failures.
+</Warning>
+
+## TypeScript requirement
+
+All new files must be TypeScript. Do not create `.js` files for new code.
+
+```text
+✅  ui/components/my-feature/my-feature.tsx
+✅  app/scripts/controllers/my-controller/my-controller.ts
+❌  ui/components/my-feature/my-feature.js
+```
+
+Existing JavaScript files are legacy — leave them in JavaScript unless you are explicitly migrating them.
+
+<Warning>
+  PRs that introduce new `.js` files will not be accepted.
+</Warning>
+
+## Running tests
+
+<Steps>
+  <Step title="Run unit tests">
+    ```bash
+    yarn test:unit                          # All unit tests
+    yarn test:unit path/to/file.test.tsx    # Single file
+    yarn test:unit:watch                    # Watch mode
+    yarn test:unit:coverage                 # With coverage report
+    ```
+  </Step>
+  <Step title="Build before E2E tests">
+    E2E tests require a test build — the dev build (`yarn start`) does not work.
+
+    ```bash
+    yarn build:test    # LavaMoat enabled (matches production)
+    yarn start:test    # LavaMoat disabled (faster iteration)
+    ```
+  </Step>
+  <Step title="Run E2E tests">
+    ```bash
+    yarn test:e2e:chrome   # All Chrome tests
+    yarn test:e2e:firefox  # All Firefox tests
+
+    # Single test with debug options
+    yarn test:e2e:single test/e2e/tests/account-menu/account-details.spec.js \
+      --browser=chrome \
+      --leave-running \
+      --debug
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+  Use `--leave-running` to keep the browser open when an E2E test fails, so you can inspect the extension state.
+</Tip>
+
+## PR workflow
+
+<Steps>
+  <Step title="Lint and stage your changes">
+    Run the linter with auto-fix on changed files before staging:
+
+    ```bash
+    yarn lint:changed:fix
+    ```
+  </Step>
+  <Step title="Commit with a Conventional Commits message">
+    Write a commit message in Conventional Commits format:
+
+    ```bash
+    git commit -m "feat(networks): add token validation for custom networks"
+    ```
+
+    The commit summary becomes the PR title and ultimately the squash commit message, so make it clear and descriptive.
+  </Step>
+  <Step title="Open a draft PR">
+    Open the PR as a **draft** unless you are explicitly ready for review. Use `.github/pull-request-template.md` as the PR body and comment out any sections that do not apply, including their headings:
+
+    ```markdown
+    <!--
+    ## Screenshots/Recordings
+    ### Before
+    ### After
+    -->
+    ```
+
+    The PR title must follow Conventional Commits format and normally matches your commit summary.
+  </Step>
+  <Step title="Complete the PR description">
+    Fill in the template sections that apply:
+
+    - **Context / Problem / Solution** — explain the background and what your change does.
+    - **Changelog entry** — a short user-facing description in past tense (e.g., `Added a new tab for users to see their NFTs`), or `null` for non-user-facing changes.
+    - **Related issues** — use `Fixes: #<issue-number>` format.
+    - **Manual testing steps** — numbered steps a reviewer can follow.
+    - **Screenshots/recordings** — required for all UI changes.
+  </Step>
+  <Step title="Pass CI and mark ready for review">
+    Once CI is green and the change is complete, convert the draft to "Ready for review" and request reviewers.
+
+    <AccordionGroup>
+      <Accordion title="Common CI failures and fixes">
+        | Failure | Fix |
+        |---|---|
+        | Lint errors | `yarn lint:changed:fix` |
+        | TypeScript errors | `yarn lint:tsc` |
+        | LavaMoat policy errors | `yarn lavamoat:auto` |
+        | Unit test failures | `yarn test:unit` |
+      </Accordion>
+    </AccordionGroup>
+  </Step>
+</Steps>
+
+## CI tips
+
+You can control CI behavior using special strings in your **last commit message**:
+
+| String       | Effect                   |
+| ------------ | ------------------------ |
+| `[skip-e2e]` | Skips the E2E test suite |
+
+<Tip>
+  Add `[skip-e2e]` to your commit message when your changes are documentation-only or do not affect extension runtime behavior. This saves significant CI time.
+</Tip>
+
+## During review
+
+- Push new commits to address feedback rather than amending and force-pushing — amending after receiving comments makes the review history harder to follow.
+- Link to the specific commit that addresses a reviewer's comment (e.g., "Fixed in `abc1234`").
+- Avoid rebasing after you have received comments for the same reason.
+- When the PR is approved, review the squash commit message. Do not modify the auto-generated format: `PR Title (#<pr-number>)`.

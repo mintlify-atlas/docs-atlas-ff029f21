@@ -1,0 +1,79 @@
+---
+title: "Introduction"
+description: "An overview of the MetaMask browser extension and how to get involved as a contributor."
+---
+
+MetaMask is a self-custodial Ethereum wallet delivered as a browser extension. It manages private keys, signs transactions, and injects an `ethereum` provider into web pages so decentralized applications can request accounts and submit transactions — all without exposing private keys to the page.
+
+The extension runs in Chrome, Firefox, Brave, and Edge. It is open source (MIT licensed) and one of the most widely deployed browser extensions in the world.
+
+<Note>
+  This site is for **extension contributors**. If you need help using MetaMask as a wallet, visit [support.metamask.io](https://support.metamask.io). For dapp developer docs, visit [docs.metamask.io](https://docs.metamask.io).
+</Note>
+
+## What you can do with this repo
+
+As a contributor you can:
+
+- Build and load the extension locally in Chrome or Firefox
+- Fix bugs, add features, and improve performance
+- Write and run unit tests (Jest) and end-to-end tests (Playwright/Selenium)
+- Extend MetaMask via the Snaps plugin platform
+- Translate the UI into new languages
+
+## Tech stack
+
+| Layer | Technology |
+|-------|------------|
+| Language | TypeScript (all new code), JavaScript (legacy) |
+| UI | React (functional components + hooks), Redux |
+| Production build | Browserify + LavaMoat |
+| Development build | Webpack |
+| Unit tests | Jest |
+| E2E tests | Playwright / Selenium WebDriver |
+| Security | LavaMoat (supply-chain sandboxing) |
+
+<Tip>
+  Use `yarn start` for a fast Webpack dev build with hot reload. Use `yarn dist` for a production Browserify + LavaMoat build that matches what ships to users.
+</Tip>
+
+## Build types
+
+MetaMask ships several distinct build types, each with a different feature set and environment configuration:
+
+| Build type | Command | Description |
+|------------|---------|-------------|
+| `main` | `yarn dist` | Standard production build for Chrome/Chromium (MV3) |
+| `beta` | `yarn dist --build-type beta` | Pre-release build; version shown as `x.y.z-beta.n` |
+| `flask` | `yarn dist --build-type flask` | Developer-focused build; enables experimental Snaps and features |
+| `experimental` | `yarn dist --build-type experimental` | Enables perps, dev options, and other early-stage features |
+| `mv2` | `yarn dist:mv2` | Firefox build using Manifest V2 and a background page |
+
+Build types are declared in [`builds.yml`](https://github.com/MetaMask/metamask-extension/blob/main/builds.yml) at the repository root. Each type specifies features, environment variables, and manifest overrides.
+
+## Key resources
+
+| Resource | URL |
+|----------|-----|
+| GitHub repository | [github.com/MetaMask/metamask-extension](https://github.com/MetaMask/metamask-extension) |
+| Community forum | [community.metamask.io](https://community.metamask.io) |
+| Developer docs | [docs.metamask.io](https://docs.metamask.io) |
+| User support | [support.metamask.io](https://support.metamask.io) |
+| Contributor docs | [github.com/MetaMask/contributor-docs](https://github.com/MetaMask/contributor-docs) |
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Local setup" icon="laptop-code" href="/getting-started/local-setup">
+    Install Node.js, configure your Infura key, and run your first development build.
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/architecture">
+    Learn how the background, content script, and UI layers fit together.
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/contributing/development-workflow">
+    Understand the PR workflow, commit conventions, and code review process.
+  </Card>
+  <Card title="Testing" icon="flask" href="/guides/testing/unit-tests">
+    Run unit tests with Jest and end-to-end tests with Playwright.
+  </Card>
+</CardGroup>

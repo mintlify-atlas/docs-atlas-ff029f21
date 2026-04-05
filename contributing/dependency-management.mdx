@@ -1,0 +1,159 @@
+---
+title: "Dependency Management"
+description: "How to add, update, and remove dependencies while keeping LavaMoat policies and attributions up to date."
+---
+
+Every dependency change — adding, updating, or removing a package — requires updating several files beyond `package.json`. Skipping any of these steps causes CI failures or LavaMoat policy violations.
+
+<Warning>
+  Always update LavaMoat policies and attributions when dependencies change. These steps are mandatory, not optional.
+</Warning>
+
+## Required steps after any dependency change
+
+<Steps>
+  <Step title="Install or update the package">
+    ```bash
+    yarn add package-name        # add a new dependency
+    yarn upgrade package-name    # update an existing dependency
+    ```
+
+    After any change, `yarn.lock` updates automatically. If you are removing a package, delete it from `package.json` and run `yarn install`.
+  </Step>
+
+  <Step title="Deduplicate the lockfile">
+    Dependency changes often introduce duplicate entries in `yarn.lock`. Remove them:
+
+    ```bash
+    yarn lint:lockfile:dedupe:fix
+    ```
+  </Step>
+
+  <Step title="Update allow-scripts">
+    The `allow-scripts` configuration controls which packages are permitted to run `install` or `postinstall` scripts. Update it to reflect the new dependency graph:
+
+    ```bash
+    yarn allow-scripts auto
+    ```
+
+    Review each new entry to decide whether the install script should be allowed to run.
+
+    <Warning>
+      `yarn allow-scripts auto` behaves inconsistently on macOS and Windows due to platform-specific optional dependencies. If you see unexpected changes, regenerate on Linux (or in CI) for the most stable result and restore your local file to avoid committing platform noise.
+    </Warning>
+  </Step>
+
+  <Step title="Update LavaMoat policies">
+    LavaMoat restricts what each dependency can do at runtime (file access, network access, etc.). Update the policies to reflect the new dependency graph:
+
+    ```bash
+    yarn lavamoat:auto
+    ```
+
+    This command updates both sets of policy files:
+    - **Webapp policies** (`lavamoat/browserify/*/policy.json`) — for production webapp dependencies.
+    - **Build system policy** (`lavamoat/build-system/policy.json`) — for build-time dependencies.
+
+    <Note>
+      `yarn lavamoat:auto` can take several minutes. Review the policy diff to confirm that the access granted to each new package is appropriate before committing.
+    </Note>
+  </Step>
+
+  <Step title="Update the attributions file">
+    Regenerate `attribution.txt`, which lists the licenses of all production dependencies:
+
+    ```bash
+    yarn attributions:generate
+    ```
+  </Step>
+</Steps>
+
+## Files that must be committed
+
+Commit all of the following files together as part of any dependency change:
+
+| File | Updated by |
+| --- | --- |
+| `package.json` | Your `yarn add` / `yarn upgrade` |
+| `yarn.lock` | `yarn install` |
+| `lavamoat/browserify/*/policy.json` | `yarn lavamoat:auto` |
+| `lavamoat/build-system/policy.json` | `yarn lavamoat:auto` |
+| `attribution.txt` | `yarn attributions:generate` |
+
+Missing any of these files will cause CI to fail.
+
+## MetaMask bot commands
+
+If you are a MetaMask team member and your PR is on a branch in the main repository (not a fork), you can ask the MetaMask bot to update policies and attributions automatically by commenting on the PR:
+
+<CodeGroup>
+
+```text update-policies
+@metamaskbot update-policies
+```
+
+```text update-attributions
+@metamaskbot update-attributions
+```
+
+</CodeGroup>
+
+| Comment | Effect |
+| --- | --- |
+| `@metamaskbot update-policies` | Regenerates all LavaMoat policy files |
+| `@metamaskbot update-attributions` | Regenerates `attribution.txt` |
+
+<Info>
+  If your PR is from a fork, bot commands are not available. Ask a MetaMask team member to run them for you, or run the commands locally and push the updated files.
+</Info>
+
+## Platform differences
+
+LavaMoat policy generation can produce different output depending on the operating system, because some packages include platform-specific optional dependencies.
+
+<Tabs>
+  <Tab title="macOS / Windows">
+    You may see extra entries in policy files or `allow-scripts` output that are specific to your platform. These changes are typically spurious and should not be committed.
+
+    Regenerate on Linux or in CI to get the canonical result, then restore your local files.
+  </Tab>
+  <Tab title="Linux / CI">
+    Regenerating on Linux produces the most stable and portable result. This is the recommended environment for finalizing policy and attribution changes before committing.
+  </Tab>
+</Tabs>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="LavaMoat policy violations after a dependency change">
+    Run `yarn lavamoat:auto` to regenerate policies. If the command fails, try a clean install first:
+
+    ```bash
+    rm -rf node_modules/ && yarn && yarn lavamoat:auto
+    ```
+  </Accordion>
+
+  <Accordion title="Policy generation fails repeatedly">
+    Check whether the failure is platform-specific. If you are on macOS or Windows, try regenerating in a Linux environment or CI. Platform-specific optional dependencies are a common cause.
+  </Accordion>
+
+  <Accordion title="You need to keep developing without fixing policies immediately">
+    Temporarily bypass LavaMoat during development only:
+
+    ```bash
+    yarn start --apply-lavamoat=false
+    ```
+
+    <Warning>
+      Never merge a PR with `--apply-lavamoat=false` in place. Fix the policy issue before merging.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Attributions check fails in CI">
+    Run `yarn attributions:generate` locally and commit the updated `attribution.txt`.
+  </Accordion>
+
+  <Accordion title="Yarn version mismatch">
+    Run `corepack enable` to activate the correct Yarn version managed by Corepack.
+  </Accordion>
+</AccordionGroup>

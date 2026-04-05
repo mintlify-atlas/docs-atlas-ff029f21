@@ -1,0 +1,184 @@
+---
+title: "State Management"
+description: "Redux architecture, ducks pattern, selectors, and how the UI syncs with the MetaMask background state."
+---
+
+MetaMask Extension uses two separate state systems that serve different purposes and run in different contexts.
+
+## Two state systems
+
+<Tabs>
+  <Tab title="Background (controller state)">
+    The background process owns the authoritative wallet state. Each controller (e.g., `TokensController`, `NetworkController`, `PreferencesController`) manages its own slice of state using `BaseController` from `@metamask/base-controller`.
+
+    This state lives in `app/scripts/controllers/` and is the source of truth for all wallet data — accounts, networks, transactions, preferences, and more.
+  </Tab>
+  <Tab title="UI (Redux store)">
+    The React UI maintains a Redux store that mirrors the relevant parts of background state. This store is rebuilt from the background state on every update and is used exclusively by UI components.
+
+    The Redux store also holds UI-only state (modal visibility, active tabs, form values) that has no counterpart in the background.
+  </Tab>
+</Tabs>
+
+## Background → UI state sync
+
+The background sends state updates to the UI via the connection established through `metamask-controller.js`. The sequence works as follows:
+
+<Steps>
+  <Step title="Background exposes state">
+    `MetaMaskController.getState()` aggregates state from all controllers into a single flat object that is safe to serialise and send to the UI.
+  </Step>
+  <Step title="UI subscribes to updates">
+    When the UI connects to the background, it subscribes to state change notifications over the extension messaging channel.
+  </Step>
+  <Step title="Redux store is updated">
+    Each state update from the background is dispatched into the Redux store, which triggers React re-renders for any connected components.
+  </Step>
+</Steps>
+
+<Note>
+You do not manually trigger this sync. Calling `this.update()` inside a controller automatically propagates the change to the UI via the messaging pipeline.
+</Note>
+
+## Redux structure
+
+```
+ui/
+├── store/        # Redux store configuration and middleware
+├── ducks/        # Redux slices (state + reducers + actions)
+└── selectors/    # Reselect selectors for derived state
+```
+
+### Ducks (`ui/ducks/`)
+
+Each subdirectory in `ui/ducks/` is a self-contained Redux slice that owns a piece of the store. Real examples from the codebase:
+
+| Duck | Purpose |
+|---|---|
+| `metamask/` | Mirrors the background MetaMask controller state |
+| `app/` | UI-only application state (active views, loading flags) |
+| `alerts/` | Alert state for transaction warnings and confirmations |
+| `confirm-transaction/` | State for the transaction confirmation flow |
+| `bridge/` | Bridge feature state |
+| `swaps/` | Token swap flow state |
+| `gas/` | Custom gas configuration |
+| `locale/` | Internationalisation and language selection |
+
+### Selectors (`ui/selectors/`)
+
+Selectors live in `ui/selectors/` and are the only place where derived state should be computed. Real examples:
+
+- `selectors.js` — general wallet selectors (selected account, network, balances)
+- `accounts.ts` — account list selectors
+- `assets.ts` — token and NFT selectors
+- `transactions.js` — transaction history selectors
+- `networks.ts` — network configuration selectors
+- `approvals.ts` — pending approval selectors
+
+## Selector pattern
+
+Use `createSelector` from `reselect` to build memoised selectors. Never compute derived values inside components.
+
+```typescript
+import { createSelector } from 'reselect';
+
+// Input selectors — read raw state
+const selectTokens = (state: MetaMaskReduxState) =>
+  state.metamask.tokens;
+
+const selectSelectedAddress = (state: MetaMaskReduxState) =>
+  state.metamask.selectedAddress;
+
+// Derived selector — recomputes only when inputs change
+export const selectTokensForSelectedAccount = createSelector(
+  selectTokens,
+  selectSelectedAddress,
+  (tokens, selectedAddress) =>
+    tokens.filter((token) => token.owner === selectedAddress),
+);
+```
+
+<Tip>
+Reselect memoises the result of the selector. The derived value is only recomputed when one of the input selectors returns a new reference. This prevents unnecessary re-renders.
+</Tip>
+
+<Warning>
+Never compute derived state inline inside a component. Inline computations re-run on every render and bypass memoisation, causing performance regressions in high-frequency update paths.
+</Warning>
+
+## Redux Toolkit
+
+MetaMask uses `@reduxjs/toolkit` for store configuration and slice creation. Write new slices with `createSlice`:
+
+```typescript
+import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+
+type AlertsState = {
+  alertEnabledness: Record<string, boolean>;
+};
+
+const alertsSlice = createSlice({
+  name: 'alerts',
+  initialState: { alertEnabledness: {} } as AlertsState,
+  reducers: {
+    setAlertEnabledness(
+      state,
+      action: PayloadAction<{ alertId: string; enabled: boolean }>,
+    ) {
+      const { alertId, enabled } = action.payload;
+      state.alertEnabledness[alertId] = enabled;
+    },
+  },
+});
+
+export const { setAlertEnabledness } = alertsSlice.actions;
+export default alertsSlice.reducer;
+```
+
+## Redux DevTools
+
+Enable the Redux DevTools extension to inspect dispatched actions and state diffs in real time.
+
+<Steps>
+  <Step title="Enable the flag in .metamaskrc">
+    ```bash
+    METAMASK_REACT_REDUX_DEVTOOLS=true
+    ```
+  </Step>
+  <Step title="Start the DevTools server">
+    ```bash
+    yarn devtools:redux
+    ```
+  </Step>
+  <Step title="Start the development build">
+    ```bash
+    yarn start:dev   # Starts the build with both React and Redux DevTools
+    ```
+  </Step>
+</Steps>
+
+## When to use Redux vs local state
+
+<AccordionGroup>
+  <Accordion title="Use Redux for global wallet state">
+    Use Redux when the state must be shared across multiple components, represents wallet data (accounts, networks, transactions, tokens), or originates from the background controller state.
+
+    Examples: selected account, current network, pending transactions, token balances.
+  </Accordion>
+  <Accordion title="Use local state for UI-only state">
+    Use React `useState` (or `useReducer`) when the state is only relevant to a single component or a small subtree, has no effect on the background, and does not need to survive navigation.
+
+    Examples: dropdown open/closed, form input values, hover state, active tab within a single panel.
+  </Accordion>
+</AccordionGroup>
+
+## Related files to update
+
+When you change a Redux duck, update these related files:
+
+```
+ui/ducks/foo/foo.ts         →  ALSO UPDATE:
+├── ui/ducks/foo/foo.test.ts             (tests for reducers and actions)
+├── ui/selectors/foo.ts                  (selectors that read this state)
+└── ui/components/*/foo-component.tsx    (components connected to this state)
+```

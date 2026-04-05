@@ -1,0 +1,253 @@
+---
+title: "Coding Standards"
+description: "TypeScript, React component patterns, naming conventions, and performance best practices."
+---
+
+## TypeScript-first
+
+All new code must be TypeScript. Do not create new `.js` files — not for utilities, not for scripts, not for components.
+
+<CardGroup cols={2}>
+  <Card title="Always TypeScript" icon="check">
+    New files use `.ts` or `.tsx`. Explicit types for all function parameters and return values.
+  </Card>
+  <Card title="No new JavaScript" icon="x">
+    Existing `.js` files are legacy. New implementations must be TypeScript.
+  </Card>
+</CardGroup>
+
+```typescript
+// Correct — explicit types
+interface Token {
+  address: string;
+  symbol: string;
+  decimals: number;
+}
+
+function addToken(token: Token): void {
+  // implementation
+}
+
+// Wrong — no return type, uses any
+function addToken(token: any) {
+  // implementation
+}
+```
+
+<Warning>
+  PRs that introduce new `.js` files will not be accepted. If you replace a JS file with a new implementation, write the replacement in TypeScript.
+</Warning>
+
+## React components
+
+Use functional components with hooks only. Class components are not permitted in new code.
+
+Destructure props directly in the function signature rather than accessing them through a `props` object:
+
+```tsx
+// Correct — functional component with destructured props
+interface TokenListItemProps {
+  token: Token;
+  isSelected: boolean;
+  onSelect: (token: Token) => void;
+}
+
+export const TokenListItem = ({ token, isSelected, onSelect }: TokenListItemProps) => {
+  return (
+    <button
+      className={isSelected ? 'selected' : ''}
+      onClick={() => onSelect(token)}
+    >
+      {token.symbol}
+    </button>
+  );
+};
+
+// Wrong — class component
+class TokenListItem extends React.Component { /* ... */ }
+
+// Wrong — props not destructured
+const TokenListItem = (props: TokenListItemProps) => {
+  return <button onClick={() => props.onSelect(props.token)}>{props.token.symbol}</button>;
+};
+```
+
+## Component folder structure
+
+All files related to a component live in a single folder named after the component in kebab-case:
+
+<Tabs>
+  <Tab title="Folder layout">
+    ```text
+    component-name/
+    ├── component-name.tsx          # Main component
+    ├── component-name.types.ts     # TypeScript types
+    ├── component-name.test.tsx     # Unit tests (colocated)
+    ├── component-name.stories.tsx  # Storybook stories
+    ├── component-name.scss         # Styles
+    └── index.ts                    # Public exports
+    ```
+  </Tab>
+  <Tab title="index.ts example">
+    ```typescript
+    export { ComponentName } from './component-name';
+    export type { ComponentNameProps } from './component-name.types';
+    ```
+  </Tab>
+</Tabs>
+
+Unit tests are always colocated with the source file they test (`.test.ts` or `.test.tsx`), not placed in a separate `__tests__` directory.
+
+## Naming conventions
+
+| Thing | Convention | Example |
+| --- | --- | --- |
+| React components | PascalCase | `TokenListItem` |
+| Functions in components | camelCase | `handleInputChange` |
+| Event handlers | `handle` prefix | `handleSubmit` |
+| Custom hooks | `use` prefix | `useTokenBalance` |
+| Higher-order components | `with` prefix | `withAuth` |
+| Controllers | PascalCase + `Controller` suffix | `TokensController` |
+
+```typescript
+// Components: PascalCase
+export const TokenListItem = () => {};
+
+// Functions: camelCase
+const handleInputChange = () => {};
+
+// Custom hooks: use prefix
+const useTokenBalance = () => {};
+
+// Higher-order components: with prefix
+const withAuth = (Component: React.ComponentType) => {};
+```
+
+## Performance rules
+
+Before marking a component complete, verify each of the following:
+
+<AccordionGroup>
+  <Accordion title="Use unique IDs as list keys, not array index">
+    React uses keys to identify list items across renders. Using array index causes incorrect behavior when items are added, removed, or reordered.
+
+    ```tsx
+    // Wrong — index as key
+    {tokens.map((token, index) => (
+      <TokenItem key={index} token={token} />
+    ))}
+
+    // Correct — unique identifier as key
+    {tokens.map((token) => (
+      <TokenItem key={token.address} token={token} />
+    ))}
+    ```
+  </Accordion>
+
+  <Accordion title="Wrap expensive calculations in useMemo">
+    Sorting, filtering, or transforming large arrays runs on every render unless memoized. Wrap such operations in `useMemo` and provide accurate dependency arrays.
+
+    ```tsx
+    // Wrong — sorts on every render
+    const sortedTokens = tokens.sort((a, b) => b.balance - a.balance);
+
+    // Correct — only re-sorts when tokens changes
+    const sortedTokens = useMemo(
+      () => [...tokens].sort((a, b) => b.balance - a.balance),
+      [tokens],
+    );
+    ```
+  </Accordion>
+
+  <Accordion title="Wrap callbacks passed to children in useCallback">
+    Inline arrow functions create a new reference on every render, causing child components wrapped in `React.memo` to re-render unnecessarily.
+
+    ```tsx
+    // Wrong — new function reference on every render
+    const handleClick = (token: Token) => {
+      setSelected(token);
+      onSelect(token);
+    };
+
+    // Correct — stable reference prevents unnecessary child re-renders
+    const handleClick = useCallback(
+      (token: Token) => {
+        setSelected(token);
+        onSelect(token);
+      },
+      [onSelect],
+    );
+    ```
+  </Accordion>
+
+  <Accordion title="Don't use useEffect for derived state">
+    If a value can be calculated directly from props or existing state during render, do not store it in state or compute it inside a `useEffect`. This pattern causes an extra render cycle.
+
+    ```tsx
+    // Wrong — unnecessary effect and extra state
+    const [displayName, setDisplayName] = useState('');
+    useEffect(() => {
+      setDisplayName(`${token.symbol} (${token.name})`);
+    }, [token]);
+
+    // Correct — calculate during render
+    const displayName = `${token.symbol} (${token.name})`;
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+  Profile with React DevTools before optimizing. Focus effort on frequently rendered components and those with expensive calculations, not simple leaf components.
+</Tip>
+
+## Code placement decisions
+
+Use this guide to determine where new code belongs in the repository:
+
+<AccordionGroup>
+  <Accordion title="Creating a controller">
+    Place controllers in `app/scripts/controllers/<controller-name>/`.
+
+    A controller must:
+    - Extend `BaseController` from `@metamask/base-controller`
+    - Define a state type and metadata for every state property
+    - Export a `getDefault<Name>ControllerState()` function (never a plain object)
+    - Use the messenger pattern for inter-controller communication
+    - Use selectors for derived state rather than getter methods
+
+    See `.cursor/rules/controller-guidelines/RULE.md` for full patterns.
+  </Accordion>
+
+  <Accordion title="Creating a UI component">
+    - **Reusable components** (used in more than one place): `ui/components/<component-name>/`
+    - **Page-level components** (one screen or route): `ui/pages/<page-name>/`
+  </Accordion>
+
+  <Accordion title="Creating a utility function">
+    - `shared/lib/` — used by both the background script and the UI
+    - `app/scripts/lib/` — used only by the background script
+    - `ui/helpers/` — used only by the UI
+  </Accordion>
+
+  <Accordion title="Creating constants">
+    Place shared constants in `shared/constants/`.
+  </Accordion>
+
+  <Accordion title="Creating TypeScript types">
+    - `shared/types/` — types shared between background and UI
+    - `types/` — project-wide types
+    - `<component-dir>/types.ts` — types specific to one component or controller
+  </Accordion>
+
+  <Accordion title="Creating a state migration">
+    Run `yarn generate:migration` to create a numbered migration file at `app/scripts/migrations/<number>.ts`. Always create a migration when you change the shape of persisted controller state.
+  </Accordion>
+</AccordionGroup>
+
+## General code style
+
+- Keep functions small and focused on a single responsibility.
+- Use early returns to reduce nesting depth.
+- Follow the DRY principle: extract repeated code into shared utilities, components, or hooks.
+- Remove all `console.log` statements and commented-out code before committing.
+- Document public utility functions using [JSDoc](https://jsdoc.app/) format.

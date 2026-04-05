@@ -1,0 +1,168 @@
+---
+title: "Build System"
+description: "Understand MetaMask's dual build system — Browserify for production and Webpack for development."
+---
+
+MetaMask Extension uses two separate build pipelines depending on the use case: Browserify for production and Webpack for development.
+
+## Two build pipelines
+
+MetaMask has two distinct build systems. The primary one (`development/build/index.js`) uses Browserify and is used for all standard builds — dev, production, and test. A second experimental Webpack pipeline (`development/webpack/`) is available for faster iteration but is not yet production-ready.
+
+| | Browserify (primary) | Webpack (experimental) |
+| --- | --- | --- |
+| **Used for** | Dev, production, and test builds | Optional faster dev iteration |
+| **LavaMoat** | Disabled for dev (`--apply-lavamoat=false`), enabled for production | Disabled |
+| **Output** | `dist/` (unpacked) and `builds/` (zipped) | `dist/` (unpacked) |
+| **Entry point** | `development/build/index.js` | `development/webpack/launch.ts` |
+| **Invoked by** | `yarn start`, `yarn dist`, `yarn build:test` | `yarn webpack` |
+| **Production ready** | Yes | No |
+
+The Browserify build wraps dependencies with [LavaMoat](https://github.com/LavaMoat/LavaMoat) for supply chain security in production. During development (`yarn start`), LavaMoat is disabled via the `--apply-lavamoat=false` flag for faster builds.
+
+<Tip>
+  Use `yarn start` for day-to-day development. Use `yarn webpack` if you want faster build times and don't need LavaMoat. Switch to `yarn build:test` only when you need to run E2E tests with a production-like build.
+</Tip>
+
+## Build types
+
+MetaMask ships several distinct distribution channels, called build types, defined in `builds.yml`.
+
+| Build type | Description | Manifest override |
+| --- | --- | --- |
+| `main` | The standard production release | None (default manifest) |
+| `beta` | Pre-release channel with version suffix (e.g. `10.25.0-beta.2`) | `app/build-types/beta/manifest/` |
+| `flask` | Canary distribution with experimental Snaps features | `app/build-types/flask/manifest/` |
+| `experimental` | Experimental channel with developer options enabled | `app/build-types/experimental/manifest/` |
+
+All build types support both MV3 (Chrome/Chromium) and MV2 (Firefox). Use the `--build-type` flag or the dedicated `yarn` script to target a specific type.
+
+## Key build commands
+
+<Tabs>
+  <Tab title="Chrome / Chromium (MV3)">
+
+    **Development (Webpack, no LavaMoat):**
+
+    ```bash
+    # Start a watched dev build for Chrome MV3
+    yarn start
+
+    # Flask build type
+    yarn start:flask
+
+    # Beta build type
+    yarn start:beta
+    ```
+
+    **Production (Browserify + LavaMoat):**
+
+    ```bash
+    # Production build for Chrome MV3
+    yarn dist
+    ```
+
+    **Test builds:**
+
+    ```bash
+    # Test build with LavaMoat enabled (mirrors production; required for E2E)
+    yarn build:test
+
+    # Test build with LavaMoat disabled (faster; good for iterating on E2E tests)
+    yarn start:test
+
+    # Flask test build
+    yarn build:test:flask
+    ```
+
+  </Tab>
+  <Tab title="Firefox (MV2)">
+
+    **Development (Webpack, no LavaMoat):**
+
+    ```bash
+    # Start a watched dev build for Firefox MV2
+    yarn start:mv2
+
+    # Flask MV2 build type
+    yarn start:flask:mv2
+    ```
+
+    **Production (Browserify + LavaMoat):**
+
+    ```bash
+    # Production build for Firefox MV2
+    yarn dist:mv2
+    ```
+
+    **Test builds:**
+
+    ```bash
+    # Test build for Firefox MV2 with LavaMoat enabled
+    yarn build:test:mv2
+
+    # Test build for Firefox MV2 with LavaMoat disabled
+    yarn start:test:mv2
+
+    # Flask MV2 test build
+    yarn build:test:flask:mv2
+    ```
+
+  </Tab>
+</Tabs>
+
+<Note>
+  `yarn start` and `yarn start:mv2` invoke `development/build/index.js` with `--apply-lavamoat=false` — same Browserify pipeline as production, but without LavaMoat. `yarn dist` and `yarn dist:mv2` run the same pipeline wrapped with LavaMoat via `yarn lavamoat:build`.
+</Note>
+
+## Build outputs
+
+| Directory | Contents |
+| --- | --- |
+| `dist/chrome` | Unpacked Chrome MV3 extension — load this in Chrome during development |
+| `dist/firefox` | Unpacked Firefox MV2 extension — load this in Firefox during development |
+| `builds/` | Compressed `.zip` archives — produced only by production builds (`yarn dist`) |
+
+The `dist/` directory is always overwritten on each build. The `builds/` directory is only populated by production (`yarn dist`) and test (`yarn build:test`) commands.
+
+## Feature flags
+
+MetaMask uses two categories of feature flags.
+
+### Build-time flags
+
+Build-time flags are compile-time constants baked into the bundle. Set them in `.metamaskrc` or pass them as environment variable prefixes:
+
+```bash
+# Set in .metamaskrc
+SOME_FEATURE=1
+
+# Or pass inline
+SOME_FEATURE=1 yarn build:test
+```
+
+Changes to build-time flags require a new build to take effect.
+
+### Remote feature flags (runtime)
+
+Remote feature flags are fetched at runtime from the client-config API (`https://client-config.api.cx.metamask.io/v1/flags`). They can be overridden locally without rebuilding by using a `.manifest-overrides.json` file:
+
+```json
+{
+  "_flags": {
+    "remoteFeatureFlags": {
+      "testBooleanFlag": false
+    }
+  }
+}
+```
+
+Point to the file in `.metamaskrc`:
+
+```ini
+MANIFEST_OVERRIDES=.manifest-overrides.json
+```
+
+You can also edit `_flags.remoteFeatureFlags` directly in the built `dist/chrome/manifest.json` after a build — but those changes are overwritten on the next build.
+
+For E2E tests, remote flags can be overridden using `manifestFlags` in `withFixtures` or `FixtureBuilder.withRemoteFeatureFlags()` without requiring a custom build.

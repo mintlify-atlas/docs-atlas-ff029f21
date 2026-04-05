@@ -1,0 +1,170 @@
+---
+title: "Feature Flags"
+description: "Working with build-time and remote feature flags in the MetaMask Extension."
+---
+
+MetaMask Extension has two distinct kinds of feature flags. Understanding the difference determines how you enable a flag for local development and how you override it in E2E tests.
+
+## Two types of feature flags
+
+<Tabs>
+  <Tab title="Build-time flags">
+    Build-time (compile-time) flags are baked into the extension bundle at build time. They are set via `.metamaskrc` or as environment variable prefixes before the build command runs.
+
+    Changing a build-time flag requires creating a new test build.
+
+    ```bash
+    # Set the flag as an environment variable prefix
+    MULTICHAIN=1 yarn build:test
+
+    # Or set it permanently in .metamaskrc
+    # MULTICHAIN=1
+    ```
+
+    After building, run your E2E tests normally against the new build.
+  </Tab>
+  <Tab title="Remote flags">
+    Remote (runtime) flags are fetched at runtime from the [client-config API](https://client-config.api.cx.metamask.io/v1/flags?client=extension&distribution=main&environment=prod). Their production defaults are tracked in the [Feature Flag Registry](#feature-flag-registry).
+
+    You do not need a custom build to change a remote flag value in a test. Instead, use one of the test-time override mechanisms described in [Overriding remote flags in E2E tests](#overriding-remote-flags-in-e2e-tests).
+  </Tab>
+</Tabs>
+
+## Overriding remote flags in E2E tests
+
+Use one of two approaches to override a remote flag value for a specific test, without rebuilding:
+
+<AccordionGroup>
+  <Accordion title="manifestFlags in withFixtures">
+    Best for simple, test-wide overrides that do not depend on other fixture state.
+
+    ```typescript
+    await withFixtures(
+      {
+        fixtures: new FixtureBuilder().build(),
+        manifestFlags: {
+          remoteFeatureFlags: {
+            myFlag: true,
+          },
+        },
+      },
+      async ({ driver }) => {
+        // test body
+      },
+    );
+    ```
+  </Accordion>
+
+  <Accordion title="FixtureBuilder.withRemoteFeatureFlags()">
+    Best when the flag change needs to interact with other fixture state. This method is only available on the legacy `FixtureBuilder` — use that builder when you need it, even for new tests.
+
+    ```typescript
+    await withFixtures(
+      {
+        fixtures: new FixtureBuilder()
+          .withRemoteFeatureFlags({ myFlag: false })
+          .build(),
+      },
+      async ({ driver }) => {
+        // test body
+      },
+    );
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  Both overrides apply only to the test that sets them. Other tests continue to use the production defaults from the registry.
+</Note>
+
+## Feature Flag Registry
+
+The Feature Flag Registry at `test/e2e/feature-flags/feature-flag-registry.ts` is the central source of truth for all remote feature flags used in E2E tests. A CI check runs on every PR to verify that every remote flag reference in changed files exists in the registry.
+
+### Registry entry format
+
+Each entry has the following shape:
+
+```typescript
+myNewFlag: {
+  name: 'myNewFlag',
+  type: FeatureFlagType.Remote,
+  inProd: true,
+  productionDefault: false,
+  status: FeatureFlagStatus.Active,
+},
+```
+
+| Field | Description |
+|---|---|
+| `name` | Must match the object key exactly |
+| `type` | `FeatureFlagType.Remote` (fetched at runtime) or `FeatureFlagType.Build` (compile-time) |
+| `inProd` | Whether the flag currently exists in the production client-config API |
+| `productionDefault` | Any valid JSON value (`boolean`, `number`, `string`, `null`, object, or array) |
+| `status` | `FeatureFlagStatus.Active` or `FeatureFlagStatus.Deprecated` |
+
+### Adding a flag to the registry
+
+<Steps>
+  <Step title="Look up the production default">
+    Check the flag's current value from the [client-config API](https://client-config.api.cx.metamask.io/v1/flags?client=extension&distribution=main&environment=prod).
+
+    If the flag is not yet deployed to production, set `inProd: false` and use the intended default as `productionDefault`.
+  </Step>
+  <Step title="Add the registry entry">
+    Add an entry to `test/e2e/feature-flags/feature-flag-registry.ts` in alphabetical order by key.
+
+    ```typescript
+    myNewFlag: {
+      name: 'myNewFlag',
+      type: FeatureFlagType.Remote,
+      inProd: true,
+      productionDefault: false,
+      status: FeatureFlagStatus.Active,
+    },
+    ```
+  </Step>
+  <Step title="Register any constant mapping (if applicable)">
+    If you access the flag via a named constant (for example, `remoteFeatureFlags[MY_FLAG_CONSTANT]`), add the constant-to-flag-name mapping to `.github/scripts/known-feature-flag-constants.ts` so the CI check can resolve the reference.
+  </Step>
+</Steps>
+
+### Removing a flag from the registry
+
+When a remote flag is fully rolled out or no longer needed:
+
+<Steps>
+  <Step title="Remove application code references">
+    Delete all references to the flag from `app/`, `ui/`, and `shared/`.
+  </Step>
+  <Step title="Clean up the registry">
+    Either remove the entry from `test/e2e/feature-flags/feature-flag-registry.ts` entirely, or change its `status` to `FeatureFlagStatus.Deprecated` if you want to track it temporarily.
+
+    ```typescript
+    myOldFlag: {
+      name: 'myOldFlag',
+      type: FeatureFlagType.Remote,
+      inProd: false,
+      productionDefault: false,
+      status: FeatureFlagStatus.Deprecated, // ← mark as deprecated
+    },
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  The CI check posts a warning on PRs that remove the last codebase reference to a registered flag, reminding you to clean up the registry entry.
+</Warning>
+
+## Registry helper functions
+
+The registry module exports helper functions for use in tests and tooling:
+
+```typescript
+import {
+  getProductionRemoteFlagApiResponse,
+  getProductionRemoteFlagDefaults,
+} from 'test/e2e/feature-flags/feature-flag-registry';
+```
+
+See the JSDoc in `feature-flag-registry.ts` for full details on each helper.

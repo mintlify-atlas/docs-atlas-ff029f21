@@ -1,0 +1,169 @@
+---
+title: "Architecture"
+description: "How the MetaMask extension is structured — background scripts, UI layer, content scripts, and the controller hierarchy."
+---
+
+The MetaMask extension is split across three execution contexts that communicate over message-passing streams. Understanding these layers is the foundation for navigating the codebase.
+
+## Extension layers
+
+### Background (`app/scripts/background.js`)
+
+The background script is the heart of the extension. In Manifest V3 (Chrome/Chromium) it runs as a **service worker**; in Manifest V2 (Firefox) it runs as a persistent **background page**.
+
+Responsibilities:
+- Bootstraps and owns the `MetaMaskController` instance
+- Maintains wallet state and persists it to storage
+- Handles all JSON-RPC requests from web pages
+- Manages the keyring, network connections, and permissions
+
+```
+app/scripts/background.js     # Entry point; starts the controller
+app/scripts/metamask-controller.js  # Root controller — wires everything together
+```
+
+### Content script (`app/scripts/contentscript.js`)
+
+The content script is injected into every web page the user visits. It acts as a **bridge** between the in-page provider and the background service worker.
+
+- Creates a duplex stream connecting the page to the background
+- Injects `app/scripts/inpage.js` into the page's JavaScript context
+- Detects extension restarts and reconnects the stream
+
+```
+app/scripts/contentscript.js  # Injected into web pages; stream bridge
+```
+
+### In-page provider (`app/scripts/inpage.js`)
+
+`inpage.js` runs directly in the web page's JavaScript context (not in the extension sandbox). It exposes `window.ethereum` — the EIP-1193 provider interface that dapps call.
+
+```
+app/scripts/inpage.js         # Exposes window.ethereum to dapps
+```
+
+### UI (`ui/`)
+
+The React application renders inside the extension popup, the full-screen home page, and notification windows. It communicates with the background via a stream-based RPC connection and reads state that the background pushes after every state update.
+
+```
+ui/                           # All React/Redux code
+```
+
+<Note>
+  The UI never directly accesses the keyring or network. All mutations go through background controller methods via the RPC bridge.
+</Note>
+
+---
+
+## MetaMask Controller
+
+`app/scripts/metamask-controller.js` is the root controller. It instantiates every sub-controller, wires them together via the **Messenger** pattern, and exposes a flat API surface that the UI and background entry point call.
+
+Key responsibilities:
+- Creates and composes all sub-controllers
+- Configures the controller messenger for pub/sub between controllers
+- Exposes `getApi()` — the set of methods the UI calls over RPC
+- Manages the JSON-RPC middleware stack
+
+```
+app/scripts/metamask-controller.js  # Root controller; composes all sub-controllers
+```
+
+---
+
+## Controller hierarchy
+
+Controllers live in `app/scripts/controllers/`. Each extends `BaseController` from `@metamask/base-controller`, defines its own state shape and metadata, and communicates with other controllers through the Messenger.
+
+| Controller | Responsibility |
+|------------|----------------|
+| `AccountsController` | Manages the list of accounts and selected account |
+| `KeyringController` | Handles key storage, signing, and hardware wallet integration |
+| `NetworkController` | Tracks the active network and manages RPC providers |
+| `PermissionController` | Enforces EIP-2255 wallet permissions per dapp origin |
+| `PreferencesController` | Stores user settings (theme, locale, etc.) |
+| `TransactionController` | Submits, tracks, and retries transactions |
+| `GasFeeController` | Fetches and caches gas fee estimates |
+| `PhishingController` | Maintains the phishing-site blocklist |
+| `SignatureController` | Handles `eth_sign`, `personal_sign`, and typed-data signing |
+| `AppStateController` | Tracks transient app state (idle timeout, approval requests) |
+
+<Note>
+  New controllers must extend `BaseController`, define state metadata (including `persist`, `anonymous`, `includeInStateLogs`, and `usedInUi` for every property), and export a `getDefault<Name>State()` function. See `app/scripts/controllers/` for examples.
+</Note>
+
+---
+
+## UI architecture
+
+The UI is a React + Redux application. The Redux store is populated by state snapshots pushed from the background after each update cycle.
+
+```
+ui/store/         # Redux store configuration and background connection
+ui/ducks/         # Redux slices (actions + reducers per feature)
+ui/selectors/     # Reselect selectors for derived state
+ui/components/    # Reusable React components (feature-scoped folders)
+ui/pages/         # Page-level components (one per extension "screen")
+ui/hooks/         # Custom React hooks
+```
+
+**Data flow:**
+
+1. Background pushes a full state snapshot over the RPC stream after every mutation.
+2. `ui/store/` receives the snapshot and dispatches it into Redux.
+3. Selectors in `ui/selectors/` derive values from the Redux state.
+4. Components read derived state via selectors; user actions call background methods via Redux thunks.
+
+<Tip>
+  Enable Redux DevTools by setting `METAMASK_REACT_REDUX_DEVTOOLS=true` in `.metamaskrc`, then run `yarn devtools:redux` alongside `yarn start:dev`.
+</Tip>
+
+---
+
+## Shared code (`shared/`)
+
+Code in `shared/` is imported by both the background scripts and the UI. Keep additions here minimal and side-effect-free.
+
+```
+shared/constants/   # Enums and constant values (chain IDs, error codes, etc.)
+shared/lib/         # Pure utility functions used by background and UI
+shared/types/       # TypeScript type definitions shared across layers
+```
+
+---
+
+## Communication pattern
+
+### Background ↔ UI
+
+The UI and background communicate over a **stream-based RPC connection** set up in `app/scripts/lib/`. When the popup opens, it establishes a duplex `ObjectMultiplex` stream to the background. Method calls from the UI travel over this stream as JSON-RPC messages; state updates travel back as notifications.
+
+```
+app/scripts/lib/    # Stream setup, RPC middleware, and utilities
+app/scripts/streams/  # Stream construction helpers
+```
+
+### Controller ↔ controller
+
+Controllers communicate via the **Messenger pattern** — a typed publish/subscribe bus. A controller publishes actions and events; other controllers subscribe to them. This avoids direct coupling between controllers and makes the dependency graph explicit.
+
+---
+
+## Manifest versions
+
+| Manifest | Target | Background execution | Build command |
+|----------|--------|----------------------|---------------|
+| MV3 | Chrome, Edge, Brave | Service worker (short-lived) | `yarn dist` |
+| MV2 | Firefox | Background page (persistent) | `yarn dist:mv2` |
+
+<Note>
+  Service workers in MV3 can be terminated by the browser at any time. The extension handles this by persisting all state to storage and re-initialising cleanly when the service worker restarts. If you are adding background logic, make sure it is stateless or fully re-entrant.
+</Note>
+
+Manifest files live in:
+
+```
+app/manifest/v3/   # MV3 manifest (Chrome default)
+app/manifest/v2/   # MV2 manifest (Firefox)
+```

@@ -1,0 +1,92 @@
+---
+title: "Add to Chrome"
+description: "Load your local MetaMask build as an unpacked extension in Chrome, Brave, or Edge."
+---
+
+These steps apply to Chrome, Brave, Edge, and any other Chromium-based browser. They load your local `dist/chrome` build as an unpacked extension in developer mode.
+
+## Prerequisites
+
+You must have a completed build in `dist/chrome` before following these steps. If you haven't built yet, run:
+
+```bash
+yarn start
+```
+
+Wait for the initial build to finish (you will see a message in the terminal when it is ready). See [Local setup](/getting-started/local-setup) if you haven't configured your environment yet.
+
+## Load the extension
+
+<Steps>
+  <Step title="Open the Extensions page">
+    Navigate to **Settings > Extensions**, or go directly to:
+
+    ```
+    chrome://extensions
+    ```
+  </Step>
+
+  <Step title="Enable Developer mode">
+    Toggle on **Developer mode** using the switch in the top-right corner of the Extensions page.
+
+    Without Developer mode, the **Load unpacked** button is hidden.
+  </Step>
+
+  <Step title="Load the unpacked build">
+    Click **Load unpacked**.
+
+    In the file picker, navigate to your repository and select the `dist/chrome` folder:
+
+    ```
+    metamask-extension/dist/chrome
+    ```
+
+    Click **Select** (or **Open**, depending on your OS).
+
+    MetaMask now appears in the list of installed extensions.
+  </Step>
+
+  <Step title="Verify the extension is working">
+    Click the puzzle piece icon in the browser toolbar to open the extensions menu, then click **MetaMask** to open the popup. You should see the MetaMask onboarding or unlock screen.
+
+    If the extension does not appear or shows an error, check the terminal running `yarn start` for build errors.
+  </Step>
+</Steps>
+
+## Inspect the background script console
+
+The background service worker runs in a separate context from the popup. To open its console:
+
+1. Go to `chrome://extensions`.
+2. Find the MetaMask card.
+3. Click **Inspect views: service worker** (MV3) or **background.html** (MV2).
+
+A DevTools window opens that shows logs, errors, and network requests from the background script.
+
+## Reload after code changes
+
+When `yarn start` detects a file change, it rebuilds automatically. After a rebuild you need to reload the extension in the browser:
+
+1. Go to `chrome://extensions`.
+2. Click the circular **Reload** icon on the MetaMask card.
+3. Re-open the MetaMask popup.
+
+<Tip>
+  For most UI changes, a simple reload of the extension is sufficient. You only need to fully remove and re-add the extension if you change the manifest or background script registration.
+</Tip>
+
+<Note>
+  Hard-refreshing the MetaMask popup window (Ctrl+Shift+R / Cmd+Shift+R) only reloads the popup HTML — it does **not** reload the background service worker. Always use the reload button on `chrome://extensions` to pick up background script changes.
+</Note>
+
+## Live rebuilds with yarn start
+
+Running `yarn start` keeps a file watcher running that rebuilds the `dist/chrome` folder whenever you save a file. The workflow is:
+
+1. Run `yarn start` once and leave it running in a terminal.
+2. Edit source files.
+3. Wait for the terminal to show the build is complete.
+4. Click the reload icon on `chrome://extensions`.
+5. Test your changes.
+
+This avoids having to run a full build command after every change.

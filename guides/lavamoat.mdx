@@ -1,0 +1,138 @@
+---
+title: "LavaMoat"
+description: "How LavaMoat supply-chain security works in MetaMask and how to update policies when dependencies change."
+---
+
+LavaMoat is a supply-chain security tool that restricts what npm dependencies can do at runtime — limiting access to capabilities such as file system access, network access, and Node.js globals. It is enabled in production builds to protect users from malicious or compromised packages.
+
+## Policy files
+
+MetaMask maintains two sets of LavaMoat policy files, each covering a different part of the codebase.
+
+<AccordionGroup>
+  <Accordion title="Production (webapp) policies">
+    **Location:** `lavamoat/browserify/*/policy.json`
+
+    These policies govern the production webapp bundle built with Browserify. Regenerate them whenever production dependencies change.
+
+    ```bash
+    yarn lavamoat:webapp:auto
+    ```
+
+    Run `yarn lavamoat:webapp:auto --help` for usage options.
+  </Accordion>
+
+  <Accordion title="Build system policy">
+    **Location:** `lavamoat/build-system/policy.json`
+
+    This policy governs the build system itself. Regenerate it whenever the packages used by the build tooling change.
+
+    ```bash
+    yarn lavamoat:build:auto
+    ```
+  </Accordion>
+</AccordionGroup>
+
+To update both sets of policies (build system + webapp + webpack policies) in one command:
+
+```bash
+yarn lavamoat:auto
+```
+
+## When to update policies
+
+Update LavaMoat policies whenever you:
+
+- Add a new dependency
+- Remove an existing dependency
+- Update an existing dependency to a new version
+- Change how code accesses Node.js APIs
+- See a **"LavaMoat policy violation"** error during a build or test run
+
+<Warning>
+  Always commit updated policy files alongside the dependency changes that triggered them. CI will fail if policies are out of date.
+</Warning>
+
+## Updating policies
+
+<Steps>
+  <Step title="Use the MetaMask bot (recommended for team members)">
+    If your PR is on a repository branch, post this comment to have the bot regenerate policies automatically:
+
+    ```
+    @metamaskbot update-policies
+    ```
+
+    <Note>
+      This shortcut is available to MetaMask team members only. If your PR comes from a fork, ask a team member to run it for you.
+    </Note>
+  </Step>
+
+  <Step title="Or regenerate manually">
+    Run the following command locally to update all policies:
+
+    ```bash
+    yarn lavamoat:auto
+    ```
+  </Step>
+
+  <Step title="Review the policy diff">
+    After regenerating, inspect the changes to each `policy.json` file. For each package that received new access grants, confirm that the granted capabilities are appropriate for what that package actually does.
+
+    Ask yourself:
+    - What new globals or builtins does this package now have access to? Why would it need them?
+    - Are there new transitive packages in the policy? Did you intend to introduce them?
+
+    Refer to the [LavaMoat policy diff guide](https://lavamoat.github.io/guides/policy-diff/) for help interpreting changes.
+  </Step>
+
+  <Step title="Mention policy reviewers">
+    Leave a comment on the PR summarizing your findings and mention the `policy-reviewers` group. Even if you don't fully understand a change, state that — it is expected and acceptable.
+  </Step>
+</Steps>
+
+## Debugging policy issues
+
+If you are diagnosing a policy failure, use these commands to generate debug output:
+
+```bash
+# Debug build system policy issues
+yarn lavamoat:debug:build
+
+# Debug webapp policy issues
+yarn lavamoat:debug:webapp
+```
+
+## Development without LavaMoat
+
+For faster iteration during development, you can disable LavaMoat:
+
+```bash
+yarn start --apply-lavamoat=false
+```
+
+<Warning>
+  Always test with LavaMoat enabled before merging. Disabling it locally is fine for iteration, but policy violations must be resolved before your PR can land.
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Policy failures on macOS or Windows">
+    `yarn lavamoat:auto` behaves inconsistently on macOS and Windows due to platform-specific optional dependencies. You may see extraneous changes in the policy files that differ from what Linux CI produces. If this happens, regenerate policies on the target platform or ask a team member running Linux to regenerate them.
+  </Accordion>
+
+  <Accordion title="Dynamic imports not covered by policy">
+    LavaMoat uses static analysis to build its policies. Dynamic imports and dynamic use of globals may not be detected automatically. If a package needs access that LavaMoat's analysis missed, you may need to update the policy manually. Refer to the [LavaMoat documentation](https://lavamoat.github.io/) or ask for help in the repository.
+  </Accordion>
+
+  <Accordion title="Policy failures persist after regeneration">
+    If you keep getting policy failures even after running `yarn lavamoat:auto`, try a clean reinstall:
+
+    ```bash
+    rm -rf node_modules/ && yarn && yarn lavamoat:auto
+    ```
+
+    This ensures stale cached modules are not influencing policy generation.
+  </Accordion>
+</AccordionGroup>

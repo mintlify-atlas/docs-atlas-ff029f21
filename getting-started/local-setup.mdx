@@ -1,0 +1,168 @@
+---
+title: "Local Setup"
+description: "Set up your MetaMask Extension development environment from scratch."
+---
+
+This guide walks you through setting up the MetaMask Extension repository on your local machine for the first time.
+
+## Prerequisites
+
+- A supported operating system (macOS, Linux, or Windows)
+- [Git](https://git-scm.com/)
+- A free [Infura account](https://app.infura.io/register) to obtain an API key
+
+## Setup steps
+
+<Steps>
+  <Step title="Install Node.js v24">
+    The project requires Node.js version 24. The repository includes an `.nvmrc` file that pins the exact version.
+
+    <CodeGroup>
+
+    ```bash nvm (recommended)
+    # Install nvm if you haven't already:
+    # https://github.com/nvm-sh/nvm#installing-and-updating
+
+    # Inside the cloned repo, run:
+    nvm use
+    # nvm reads .nvmrc and switches to the correct version automatically.
+    # If the version is not installed yet, run: nvm install
+    ```
+
+    ```bash manual install
+    # Download Node.js 24 from the official site:
+    # https://nodejs.org/en/download/
+    # Follow the installer for your operating system.
+    ```
+
+    </CodeGroup>
+  </Step>
+
+  <Step title="Enable Corepack">
+    Corepack ships with Node.js and manages Yarn on a per-project basis. Run the following command **inside the repository root** to activate it:
+
+    ```bash
+    corepack enable
+    ```
+
+    <Note>
+      Do not install Yarn globally via npm. Modern releases of Yarn are intended to be managed by Corepack, not installed globally.
+    </Note>
+  </Step>
+
+  <Step title="Clone the repository and copy the config file">
+    Clone the repository, then copy the sample configuration file to create your local config:
+
+    ```bash
+    git clone https://github.com/MetaMask/metamask-extension.git
+    cd metamask-extension
+    cp .metamaskrc.dist .metamaskrc
+    ```
+
+    The `.metamaskrc` file is gitignored and holds your personal environment variables. The `.metamaskrc.dist` file in the repo serves as the template.
+  </Step>
+
+  <Step title="Configure .metamaskrc">
+    Open `.metamaskrc` in your editor and set the values you need.
+
+    **Required:**
+
+    | Variable | Description |
+    | --- | --- |
+    | `INFURA_PROJECT_ID` | Your personal [Infura API key](https://docs.infura.io/networks/ethereum/how-to/secure-a-project/project-id). The placeholder value `00000000000` must be replaced. |
+
+    **Optional:**
+
+    | Variable | Description |
+    | --- | --- |
+    | `PASSWORD` | Pre-fills your development wallet password so you don't have to type it every time you open the extension. |
+    | `SEGMENT_WRITE_KEY` | Your [Segment write key](https://segment.com/docs/connections/find-writekey/). Required only if you are debugging MetaMetrics event tracking. |
+    | `SENTRY_DSN_DEV` | A [Sentry DSN](https://docs.sentry.io/product/sentry-basics/dsn-explainer/) for local development — sends errors to the `test-metamask` Sentry project. Use this (not `SENTRY_DSN`) for debugging unhandled exceptions locally. |
+
+    A minimal `.metamaskrc` looks like this:
+
+    ```ini
+    INFURA_PROJECT_ID=your_infura_key_here
+    ```
+
+    You can optionally override remote feature flags at build time by creating a `.manifest-overrides.json` file and pointing to it:
+
+    ```ini
+    MANIFEST_OVERRIDES=.manifest-overrides.json
+    ```
+
+    ```json
+    {
+      "_flags": {
+        "remoteFeatureFlags": { "testBooleanFlag": false }
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    ```bash
+    yarn install
+    ```
+
+    This command reads the `packageManager` field in `package.json` and uses the correct Yarn version via Corepack.
+  </Step>
+
+  <Step title="Start a development build">
+    Choose the target browser:
+
+    ```bash
+    # Chrome / Chromium / Brave / Edge (Manifest V3 — default)
+    yarn start
+
+    # Firefox (Manifest V2)
+    yarn start:mv2
+    ```
+
+    Both commands watch for file changes and rebuild automatically. Uncompressed output lands in `./dist/chrome` or `./dist/firefox`.
+
+    Once the build finishes, follow the instructions in [Add to Chrome](/getting-started/add-to-chrome) or [Add to Firefox](/getting-started/add-to-firefox) to load the extension in your browser.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+| Issue | Solution |
+| --- | --- |
+| `command not found: yarn` | Run `corepack enable` |
+| Build fails with policy errors | Run `yarn lavamoat:auto` |
+| Invalid Infura key error | Check `INFURA_PROJECT_ID` in `.metamaskrc` |
+| Ganache won't start | Ensure port 8545 is available |
+| Git hooks not working in VS Code | Follow the [Husky troubleshooting guide](https://typicode.github.io/husky/troubleshooting.html#command-not-found) |
+
+## GitHub Codespaces quickstart
+
+<AccordionGroup>
+  <Accordion title="Set up a dev environment in under 5 minutes with Codespaces">
+    If you prefer not to build locally, you can use GitHub Codespaces to spin up a ready-to-use environment.
+
+    <Warning>
+      Codespaces has a [limited free monthly quota](https://docs.github.com/en/billing/managing-billing-for-github-codespaces/about-billing-for-github-codespaces). You are billed for both running time and storage.
+    </Warning>
+
+    1. Click **Open in GitHub Codespaces** on the [repository page](https://github.com/MetaMask/metamask-extension).
+    2. A browser tab opens with a remote VS Code instance (this takes a few minutes to load).
+    3. A **Simple Browser** panel opens with noVNC — click **Connect**.
+       - Optional: click the upper-right button to open noVNC in its own tab, then open the noVNC sidebar, click the gear icon, and set **Scaling Mode** to **Remote Resizing**.
+    4. Wait roughly 20 seconds on the first launch for setup scripts to finish.
+    5. Right-click the noVNC desktop to launch Chrome or Firefox with MetaMask pre-installed.
+    6. Edit code, then run `yarn start` to build in development mode.
+    7. After a minute or two the build finishes and your changes appear in the noVNC desktop.
+
+    **Tips to keep usage low:**
+
+    - Codespaces pause after 30 minutes of inactivity and auto-delete after 30 days.
+    - Manually pause a Codespace before the 30-minute timeout from [github.com/codespaces](https://github.com/codespaces).
+    - Delete idle Codespaces rather than letting them accumulate — storage quota runs out quickly with several stale environments.
+    - Reuse an existing Codespace by switching its branch instead of creating a new one.
+
+    <Note>
+      If you are developing on a fork, the default Infura key is on the free plan and has limited throughput. Add your own `INFURA_PROJECT_ID` to `.metamaskrc` following the steps above.
+    </Note>
+  </Accordion>
+</AccordionGroup>

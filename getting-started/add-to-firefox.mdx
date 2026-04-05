@@ -1,0 +1,99 @@
+---
+title: "Add to Firefox"
+description: "Load your local MetaMask MV2 build as a temporary add-on in Firefox."
+---
+
+Firefox uses Manifest V2 (MV2), while Chrome uses Manifest V3 (MV3). You must use the dedicated Firefox build commands to get a compatible output.
+
+## Prerequisites
+
+You need a completed Firefox build in `dist/firefox`. Run one of the following commands:
+
+```bash
+# Development build with file watching (recommended during development)
+yarn start:mv2
+
+# Production build (Browserify + LavaMoat)
+yarn dist:mv2
+```
+
+Wait for the initial build to finish before loading the extension. See [Local setup](/getting-started/local-setup) if you haven't configured your environment yet.
+
+## Load the extension
+
+<Steps>
+  <Step title="Open the debugging page">
+    In Firefox, navigate to:
+
+    ```
+    about:debugging#addons
+    ```
+  </Step>
+
+  <Step title="Select This Firefox">
+    In the left sidebar, click **This Firefox**.
+  </Step>
+
+  <Step title="Load the temporary add-on">
+    Click **Load Temporary Add-on...**.
+
+    In the file picker, navigate to your repository and select the `manifest.json` file inside `dist/firefox`:
+
+    ```
+    metamask-extension/dist/firefox/manifest.json
+    ```
+
+    You must select the `manifest.json` file itself, not the `dist/firefox` folder.
+  </Step>
+
+  <Step title="Verify the extension is working">
+    MetaMask appears in the list of temporary extensions on the `about:debugging` page and in the browser toolbar. Click the MetaMask icon to open the popup and confirm it loads correctly.
+  </Step>
+</Steps>
+
+<Warning>
+  Temporary add-ons are removed when Firefox restarts. You need to reload the extension each time you restart the browser by repeating steps 1–3 above.
+</Warning>
+
+## Inspect the background script console
+
+Unlike Chrome, Firefox MV2 uses a background page rather than a service worker. To open its console:
+
+1. Go to `about:debugging`.
+2. Click **This Firefox**.
+3. Find the MetaMask entry in the list.
+4. Click **Inspect** next to it.
+
+A DevTools window opens showing all console output from MetaMask's background processes.
+
+## Reload after code changes
+
+After `yarn start:mv2` rebuilds, reload the extension in Firefox:
+
+1. Go to `about:debugging` > **This Firefox**.
+2. Find MetaMask in the list.
+3. Click **Reload**.
+
+## MV2 vs MV3 differences
+
+| | MV2 (Firefox) | MV3 (Chrome/Chromium) |
+| --- | --- | --- |
+| **Background** | Persistent background page | Service worker (non-persistent) |
+| **Build command** | `yarn start:mv2` / `yarn dist:mv2` | `yarn start` / `yarn dist` |
+| **Output folder** | `dist/firefox` | `dist/chrome` |
+| **Manifest flag** | `ENABLE_MV3=false` | Default |
+| **Permissions model** | Broader host permissions | More restrictive |
+
+<Note>
+  MetaMask uses the `webextension-polyfill` library to abstract browser API differences. Most application code works the same on both MV2 and MV3, but background script lifecycle behavior differs — service workers in MV3 can be terminated and restarted by the browser at any time.
+</Note>
+
+## Firefox Snap on Linux
+
+If you are running Firefox installed as a Snap package on Linux, you may encounter permission errors when running E2E tests. Set the `FIREFOX_SNAP` environment variable to tell the test driver to use the Snap-compatible Firefox path:
+
+```bash
+FIREFOX_SNAP=true yarn test:e2e:firefox
+```
+
+This variable is only needed for E2E test automation, not for manually loading the extension in Firefox.

@@ -1,0 +1,238 @@
+---
+title: "UI Components"
+description: "React component patterns, Storybook, and the design system used in MetaMask Extension."
+---
+
+The MetaMask Extension UI is built with React (functional components, TypeScript, hooks) and organised into a consistent directory structure that co-locates each component with its types, tests, stories, and styles.
+
+## Component structure
+
+Each component lives in its own folder. The folder name matches the component name in kebab-case.
+
+```
+ui/components/app/my-component/
+├── my-component.tsx        # Component implementation
+├── my-component.types.ts   # Prop types and related interfaces
+├── my-component.test.tsx   # Unit and interaction tests
+├── my-component.stories.tsx # Storybook stories
+├── my-component.scss       # Component-scoped styles
+└── index.ts                # Public exports
+```
+
+When you modify a component, keep all of these files in sync. Specifically:
+
+```
+ui/components/foo/foo.tsx  →  ALSO UPDATE:
+├── ui/components/foo/foo.test.tsx    (tests — especially if props changed)
+├── ui/components/foo/foo.types.ts    (if props interface changed)
+├── ui/components/foo/foo.stories.tsx (if props changed)
+└── ui/components/foo/index.ts        (if exports changed)
+```
+
+## Functional components only
+
+Write all components as functions. Class components are not permitted in this codebase.
+
+```typescript
+import React from 'react';
+import type { MyComponentProps } from './my-component.types';
+
+export function MyComponent({ label, onClick, isDisabled = false }: MyComponentProps) {
+  return (
+    <button disabled={isDisabled} onClick={onClick}>
+      {label}
+    </button>
+  );
+}
+```
+
+Use hooks for all state and side effects:
+
+- `useState` / `useReducer` for local UI state
+- `useEffect` for side effects and subscriptions
+- `useSelector` / `useDispatch` for Redux integration
+- Custom hooks in `ui/hooks/` for reusable stateful logic
+
+## Design system
+
+<Tabs>
+  <Tab title="Design tokens">
+    Import colours, spacing, typography, and other base tokens from `@metamask/design-tokens`:
+
+    ```typescript
+    import { ColorBackgroundDefault, FontSizeDisplayMd } from '@metamask/design-tokens';
+    ```
+
+    Tokens ensure visual consistency with the MetaMask design system across web and extension surfaces.
+  </Tab>
+  <Tab title="Component library">
+    Use pre-built accessible components from `@metamask/design-system-react` before building a new component from scratch:
+
+    ```typescript
+    import { Button, Text, Box } from '@metamask/design-system-react';
+
+    export function ConfirmAction({ onConfirm }: { onConfirm: () => void }) {
+      return (
+        <Box>
+          <Text>Are you sure?</Text>
+          <Button onClick={onConfirm}>Confirm</Button>
+        </Box>
+      );
+    }
+    ```
+  </Tab>
+  <Tab title="Tailwind CSS">
+    Utility classes are available via Tailwind CSS. Configuration lives in `tailwind.config.js` at the repository root. Use Tailwind classes for layout and spacing before reaching for custom SCSS.
+
+    ```typescript
+    <div className="flex items-center gap-2 p-4">
+      <span className="text-sm font-medium">{label}</span>
+    </div>
+    ```
+  </Tab>
+</Tabs>
+
+## Storybook
+
+Storybook is the primary tool for developing and documenting components in isolation. Run it before building components to explore existing primitives and design system components.
+
+```bash
+yarn storybook        # Start Storybook dev server at http://localhost:6006
+yarn storybook:build  # Build a static Storybook site
+```
+
+Write a story for every new component and update stories when props change:
+
+```typescript
+import type { Meta, StoryObj } from '@storybook/react';
+import { MyComponent } from './my-component';
+
+const meta: Meta<typeof MyComponent> = {
+  title: 'Components/App/MyComponent',
+  component: MyComponent,
+};
+
+export default meta;
+type Story = StoryObj<typeof MyComponent>;
+
+export const Default: Story = {
+  args: {
+    label: 'Click me',
+    isDisabled: false,
+  },
+};
+
+export const Disabled: Story = {
+  args: {
+    label: 'Unavailable',
+    isDisabled: true,
+  },
+};
+```
+
+## Testing components
+
+Use `@testing-library/react` to test components. Test behaviour from the user's perspective — simulate interactions and assert on visible output, not on internal state or implementation details.
+
+```typescript
+import { screen, fireEvent } from '@testing-library/react';
+import { renderWithProvider } from '../../../test/lib/render-helpers';
+import { MyComponent } from './my-component';
+
+describe('MyComponent', () => {
+  it('calls onClick when the button is clicked', () => {
+    const handleClick = jest.fn();
+    renderWithProvider(
+      <MyComponent label="Submit" onClick={handleClick} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the button when isDisabled is true', () => {
+    renderWithProvider(
+      <MyComponent label="Submit" onClick={jest.fn()} isDisabled />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled();
+  });
+});
+```
+
+<Warning>
+Do not test internal component state directly. If you find yourself reaching into component internals, refactor the test to interact through the rendered UI instead.
+</Warning>
+
+## Key component directories
+
+| Directory | Purpose |
+|---|---|
+| `ui/components/app/` | Feature-specific components tied to MetaMask app flows |
+| `ui/components/component-library/` | Low-level, reusable UI primitives |
+| `ui/components/multichain/` | Components for multi-chain and cross-chain functionality |
+| `ui/components/ui/` | General-purpose utility components |
+| `ui/pages/` | Page-level components mounted by the router |
+
+<Note>
+Prefer placing new components in `ui/components/app/` for feature-specific work, or `ui/components/component-library/` if the component is a generic primitive with no business logic.
+</Note>
+
+## Performance in components
+
+Apply these optimisations where they have measurable impact. Avoid premature optimisation — profile first.
+
+<AccordionGroup>
+  <Accordion title="Memoize expensive derived values with useMemo">
+    ```typescript
+    const sortedTokens = useMemo(
+      () => [...tokens].sort((a, b) => b.balance - a.balance),
+      [tokens],
+    );
+    ```
+
+    Use `useMemo` when a computation is expensive and its inputs change less often than the component renders.
+  </Accordion>
+  <Accordion title="Stabilize callbacks with useCallback">
+    ```typescript
+    const handleRemove = useCallback(
+      (address: string) => {
+        dispatch(removeToken(address));
+      },
+      [dispatch],
+    );
+    ```
+
+    Use `useCallback` when passing a callback to a child wrapped in `React.memo`, or as a dependency of `useEffect` or `useMemo`.
+  </Accordion>
+  <Accordion title="Prevent unnecessary re-renders with React.memo">
+    ```typescript
+    export const TokenListItem = React.memo(function TokenListItem({
+      token,
+      onRemove,
+    }: TokenListItemProps) {
+      return (
+        <div>
+          <span>{token.symbol}</span>
+          <button onClick={() => onRemove(token.address)}>Remove</button>
+        </div>
+      );
+    });
+    ```
+
+    Wrap components in `React.memo` when they receive stable props and their parent re-renders frequently.
+  </Accordion>
+  <Accordion title="Virtualize large lists">
+    For lists with many items (token lists, transaction history, network selectors), use a virtualisation library so only the visible rows are mounted in the DOM. Rendering hundreds of DOM nodes at once causes significant layout and paint costs.
+  </Accordion>
+  <Accordion title="Use unique, stable keys">
+    Always use a unique identifier (address, ID, hash) as the `key` prop for list items. Never use array index as a key for dynamic lists — it causes React to mis-reconcile items when the list order changes.
+
+    ```typescript
+    {tokens.map((token) => (
+      <TokenListItem key={token.address} token={token} onRemove={handleRemove} />
+    ))}
+    ```
+  </Accordion>
+</AccordionGroup>

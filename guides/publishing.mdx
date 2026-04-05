@@ -1,0 +1,96 @@
+---
+title: "Publishing"
+description: "The release process for publishing a new version of the MetaMask Extension."
+---
+
+This guide describes the steps for creating a release branch, building a production artifact, and publishing the MetaMask Extension to each store.
+
+## Overview
+
+Before starting a release, confirm the following criteria:
+
+- Deploy early in the week to leave time to respond to unforeseen bugs.
+- Deploy early in the day for the same reason.
+- Ensure at least one member of the support team is on duty to monitor incoming user issues.
+- Roll out incrementally when possible — start with a small percentage of users and expand gradually.
+
+## Creating a release branch
+
+<Steps>
+  <Step title="Create the branch">
+    Create a branch named `release/X.Y.Z` off of the `main` branch, where `X`, `Y`, and `Z` are the version numbers.
+
+    You can [create branches directly on GitHub](https://help.github.com/en/articles/creating-and-deleting-branches-within-your-repository).
+  </Step>
+
+  <Step title="Wait for the CI bump PR">
+    Once the release branch exists, CI automatically opens a Pull Request that bumps the app manifest version and the changelog version. Review and merge this PR before proceeding.
+  </Step>
+</Steps>
+
+## Sensitive releases
+
+If the release contains changes that cannot be fully verified prior to publication, follow the sensitive release protocol described in `docs/sensitive-release.md` before continuing.
+
+## Updating the changelog
+
+Use the `auto-changelog` tooling to keep the changelog accurate:
+
+```bash
+# Update CHANGELOG.md entries
+yarn update-changelog
+
+# Lint the changelog for formatting issues
+yarn lint:changelog
+```
+
+<Tip>
+  Run `yarn lint:changelog` in CI or locally to catch formatting errors before the release PR is merged.
+</Tip>
+
+## Building for production
+
+Production builds are created from the **release branch HEAD** using the `publish-release-from-release-head.yml` CI workflow in `.github/workflows/`. This workflow builds, tags, and publishes the extension before the release branch is merged to `stable`.
+
+<Note>
+  Do not build production artifacts manually from your local machine. Always trigger the workflow from the release branch.
+</Note>
+
+## Publishing
+
+Once the build workflow completes successfully, publish to each target:
+
+<Steps>
+  <Step title="Chrome Web Store">
+    Visit the [Chrome Developer Dashboard](https://chrome.google.com/webstore/developer/dashboard?authuser=2) and publish the new build.
+  </Step>
+
+  <Step title="Firefox Add-ons">
+    Publish to [addons.mozilla.org](http://addons.mozilla.org/en-us/firefox/addon/ether-metamask).
+  </Step>
+
+  <Step title="Opera Store">
+    Publish to the [Opera Add-ons store](https://addons.opera.com/en/extensions/details/metamask/).
+  </Step>
+
+  <Step title="GitHub Releases">
+    Create a new entry on the [GitHub Releases page](https://github.com/MetaMask/metamask-extension/releases).
+  </Step>
+
+  <Step title="Announce">
+    Run the `yarn announce` script and post the announcement in the appropriate public channels.
+  </Step>
+</Steps>
+
+## Hotfixes
+
+The `main` branch is not always in a fully QA-verified state. When an urgent fix is needed in production:
+
+<CardGroup cols={2}>
+  <Card title="Target the stable branch" icon="code-branch">
+    Open the hotfix PR against `stable`, not `main`. Describe it as a hotfix and apply the hotfix label.
+  </Card>
+  <Card title="Use the same publish workflow" icon="rocket">
+    Publish from the hotfix branch HEAD using the same `publish-release-from-release-head.yml` workflow. After publishing, the hotfix is merged to `stable` and stable-sync PRs propagate the changes back to `main`.
+  </Card>
+</CardGroup>

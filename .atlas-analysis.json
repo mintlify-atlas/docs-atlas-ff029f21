@@ -1,0 +1,99 @@
+{
+  "projectType": "frontend",
+  "projectName": "MetaMask Extension",
+  "projectDescription": "A browser extension for Chrome, Firefox, and Chromium-based browsers that enables users to manage Ethereum accounts and interact with decentralized applications.",
+  "theme": "almond",
+  "primaryColor": "#cd5827",
+  "lightColor": "#f49c7c",
+  "darkColor": "#e5e4e9",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Getting Started",
+        "groups": [
+          {
+            "group": "Introduction",
+            "pages": ["introduction", "architecture"]
+          },
+          {
+            "group": "Setup & Building",
+            "pages": [
+              "getting-started/local-setup",
+              "getting-started/build-system",
+              "getting-started/add-to-chrome",
+              "getting-started/add-to-firefox"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "contributing/development-workflow",
+              "contributing/coding-standards",
+              "contributing/dependency-management"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Testing",
+            "pages": [
+              "guides/testing/unit-tests",
+              "guides/testing/e2e-tests",
+              "guides/testing/feature-flags"
+            ]
+          },
+          {
+            "group": "Architecture & Patterns",
+            "pages": [
+              "guides/controllers",
+              "guides/state-management",
+              "guides/ui-components"
+            ]
+          },
+          {
+            "group": "Security",
+            "pages": [
+              "guides/lavamoat",
+              "guides/publishing"
+            ]
+          },
+          {
+            "group": "Advanced Topics",
+            "pages": [
+              "guides/snaps",
+              "guides/translations",
+              "guides/browser-support"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-network Ethereum wallet supporting Mainnet, testnets, and custom EVM-compatible networks",
+    "MetaMask Snaps extensibility platform for adding new features via sandboxed plugins",
+    "Hardware wallet support (Ledger, Trezor, Lattice, Keystone)",
+    "Multi-account management with HD keyring and seed phrase recovery",
+    "DApp connection management with fine-grained permission controls (EIP-2255)",
+    "Token detection, NFT support, and asset management across networks",
+    "Built-in token swap and bridge functionality",
+    "LavaMoat supply chain security for runtime isolation of dependencies",
+    "Manifest V3 (Chrome) and Manifest V2 (Firefox) support",
+    "Phishing and PPOM (Privacy-Preserving On-chain Message) protection"
+  ],
+  "publicApiSurface": [
+    "ethereum.request({ method: 'eth_requestAccounts' }) — connect and request user accounts",
+    "ethereum.request({ method: 'eth_sendTransaction' }) — initiate a transaction",
+    "ethereum.request({ method: 'wallet_addEthereumChain' }) — add a custom network",
+    "ethereum.request({ method: 'wallet_switchEthereumChain' }) — switch active network",
+    "ethereum.request({ method: 'wallet_watchAsset' }) — watch a token asset",
+    "ethereum.request({ method: 'eth_signTypedData_v4' }) — structured data signing (EIP-712)",
+    "ethereum.request({ method: 'personal_sign' }) — personal message signing",
+    "ethereum.on('accountsChanged', handler) — subscribe to account changes",
+    "ethereum.on('chainChanged', handler) — subscribe to network changes",
+    "MetaMask Snaps API — extend MetaMask with custom Snap plugins"
+  ]
+}
